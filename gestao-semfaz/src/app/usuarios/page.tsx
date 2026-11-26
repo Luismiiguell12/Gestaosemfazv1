@@ -2,7 +2,9 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useMemo, useState } from 'react';
 import { AppShell, Cabecalho } from '@/components/layout/AppShell';
+import { ImportarPlanilha } from '@/components/ImportarPlanilha';
 import { SolicitarDialogo, type CampoForm } from '@/components/SolicitarDialogo';
+import { COLUNAS_SERVIDORES } from '@/lib/planilha';
 import { Aviso, Campo, Dialogo, EstadoVazio, Selo } from '@/components/ui';
 import { mensagemErro } from '@/lib/erros';
 import { arvore, caminho, type Unidade } from '@/lib/estrutura';
@@ -80,6 +82,7 @@ function Tela() {
   const [pedido, setPedido] = useState<Pedido | null>(null);
   const [novoServidor, setNovoServidor] = useState(false);
   const [convite, setConvite] = useState(false);
+  const [importar, setImportar] = useState(false);
 
   const podePedirServidor = geral || (ehChefia(info) && temModulo(info, 'usuarios') && esc.has(unidadeSel ?? ''));
   const opUnidades = U.filter((u) => geral || esc.has(u.id)).map((u) => ({ valor: u.id, rotulo: u.sigla }));
@@ -108,7 +111,7 @@ function Tela() {
         trilha={[{ rotulo: 'Início', href: '/' }, { rotulo: 'Unidades e usuários' }]}
         titulo="Unidades e usuários"
         acoes={<>
-          <button type="button" className="botao" disabled title="Disponível na Fase 2">Importar servidores (planilha)</button>
+          {geral && <button type="button" className="botao" onClick={() => setImportar(true)}>Importar servidores (planilha)</button>}
           {geral && <button type="button" className="botao botao-primario" onClick={() => setConvite(true)}>+ Convidar usuário</button>}
         </>}
       />
@@ -195,6 +198,13 @@ function Tela() {
       )}
       {pedido && <SolicitarDialogo aberto fechar={() => setPedido(null)} titulo={pedido.titulo} tipo={pedido.tipo} alvoId={pedido.alvo} campos={pedido.campos} aviso={pedido.aviso} />}
       {novoServidor && <NovoServidor fechar={() => setNovoServidor(false)} unidadeId={unidadeSel!} opUnidades={opUnidades} opCargos={opCargos} aoSalvar={recarregar} />}
+      {geral && (
+        <ImportarPlanilha aberto={importar} fechar={() => setImportar(false)} titulo="Importar servidores (planilha)" colunas={COLUNAS_SERVIDORES}
+          rpcPrevia="importar_servidores_previa" rpcImportar="importar_servidores" nomeModelo="modelo-servidores.csv"
+          exemplo={['Nome Completo Exemplo', '000999', 'Auditor Fiscal', 'COFIT', '', '30', '0', '0']}
+          explicacao="Cadastra servidores novos com os saldos do RH. Matrícula obrigatória e única; cargo e unidade devem existir (sigla da unidade). Antes de gravar, o sistema mostra todos os erros e só importa se não houver nenhum. Alterar servidor já cadastrado continua passando por aprovação."
+          aoImportar={recarregar} />
+      )}
       {convite && <Convite fechar={() => setConvite(false)} servidores={S.filter((s) => s.situacao === 'ativo' && s.email_institucional && !US.some((u) => u.servidor_id === s.id))} perfilAtual={info?.perfil} aoSalvar={recarregar} />}
     </>
   );

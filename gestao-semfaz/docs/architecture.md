@@ -184,6 +184,49 @@ erDiagram
 
 Tabelas internas sem acesso pela API: `limites_requisicao` (limite de requisições das funções sensíveis).
 
+### Fase 2 (acréscimos)
+
+```mermaid
+erDiagram
+  servidores ||--o| saldos_servidor : "saldos do RH"
+  servidores ||--o{ afastamentos : "férias/licença/folga"
+  servidores ||--o{ afastamentos : "substituto"
+  folhas_lotes ||--o{ folhas_paginas : "1 por página do PDF"
+  folhas_lotes ||--o{ folhas_arquivos : "PDF por unidade (versões)"
+  servidores ||--o{ folhas_paginas : "matrícula"
+  unidades ||--o{ folhas_entregas : "competência"
+  saldos_servidor { uuid servidor_id PK
+    numeric ferias_dias
+    numeric licenca_premio_dias
+    numeric folgas }
+  afastamentos { uuid id PK
+    tipo_afastamento tipo "ferias|licenca_premio|folga"
+    date inicio
+    date fim
+    status_afastamento status "solicitado|aprovado|recusado|cancelado"
+    uuid substituto_id "obrigatório se aprovado"
+    bool conflito_mesmo_cargo }
+  folhas_lotes { uuid id PK
+    date competencia
+    text arquivo_path }
+  folhas_paginas { uuid lote_id PK
+    int pagina PK
+    text matricula_lida
+    uuid servidor_id
+    uuid unidade_id }
+  folhas_arquivos { uuid id PK
+    uuid unidade_id "null = não identificadas"
+    text path }
+  folhas_entregas { date competencia PK
+    uuid unidade_id PK
+    date enviada_em
+    uuid recebida_por
+    date devolvida_em
+    uuid devolvida_por }
+```
+
+Fluxo das folhas de ponto: navegador lê o texto de cada página (pdf.js) → `criar_lote_folhas` cruza matrícula no banco → navegador monta um PDF por unidade (pdf-lib: folha de rosto + servidores em ordem alfabética) → upload no bucket privado `folhas-ponto` → `registrar_arquivos_folhas`. A chefia só baixa os arquivos das unidades do seu escopo (política do Storage segue `folhas_arquivos`).
+
 `servidores` entra na Fase 1 só com o núcleo (necessário para usuários e para a regra da matrícula). Saldos, importação por planilha e folhas de ponto: Fase 2.
 
 ## 4. Perfis, escopo e módulos
