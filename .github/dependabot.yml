@@ -5,7 +5,19 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # versões grandes destes exigem migração planejada (Node 22 / TS 5)
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+    groups:
+      dependencias-menores:
+        update-types: ['minor', 'patch']
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      acoes-github:
+        patterns: ['*']
