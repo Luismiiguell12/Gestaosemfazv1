@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Calendário por unidade</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F4F6F9;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#1B2433}
+a{color:#1D5FD1}a:hover{color:#0F2A4A}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="display:flex;flex-wrap:wrap;min-height:1000px;background:#F4F6F9">
+  <nav aria-label="Menu principal" style="flex:1 1 230px;max-width:100%;background:{{t.nav}};color:#DCE4F0;padding:24px 14px;box-sizing:border-box;display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;align-items:center;gap:10px;padding:0 8px 22px"><svg role="img" aria-label="Logo Gestão SEMFAZ" width="38" height="38" viewBox="0 0 40 40" style="flex:none"><rect x="0" y="0" width="40" height="40" rx="10" fill="{{t.logo}}"></rect><path d="M28 13.5A10 10 0 1 0 30 21h-9" fill="none" stroke="{{t.nav}}" stroke-width="3.6" stroke-linecap="round"></path><rect x="17" y="24" width="3" height="5" rx="1" fill="{{t.nav}}"></rect><rect x="21.5" y="21" width="3" height="8" rx="1" fill="{{t.nav}}"></rect></svg><div><div style="font-weight:700;color:#fff;font-size:17px;letter-spacing:.2px">Gestão SEMFAZ</div><div style="font-size:11px;color:#B9C6D8">Prefeitura de Lagarto/SE</div></div></div>
+    <a href="Main.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg><span>Painel</span></a>
+    <a href="Demandas.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><path d="m3 6 1.5 1.5L7 5"></path><path d="m3 12 1.5 1.5L7 11"></path><path d="m3 18 1.5 1.5L7 17"></path></svg><span>Demandas</span></a>
+    <a href="#" aria-current="page" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;color:#FFFFFF;background:{{t.primary}}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M8 2v4"></path><path d="M16 2v4"></path><path d="M3 10h18"></path></svg><span>Calendário</span></a>
+    <a href="Contrato.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path><path d="M9 13h6"></path><path d="M9 17h6"></path></svg><span>Contratos de locação</span></a>
+    <a href="UnidadesConsumidoras.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M13 2 4 14h7l-1 8 9-12h-7z"></path></svg><span>Unidades consumidoras</span></a>
+    <a href="Ferias.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.9 4.9 1.4 1.4"></path><path d="m17.7 17.7 1.4 1.4"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m4.9 19.1 1.4-1.4"></path><path d="m17.7 6.3 1.4-1.4"></path></svg><span>Férias e folgas</span></a>
+    <a href="FolhasPonto.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>Folhas de ponto</span></a>
+    <a href="Produtividade.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M3 3v18h18"></path><path d="m7 15 4-4 3 3 5-6"></path></svg><span>Produtividade</span><span style="margin-left:auto;font-size:10px;color:#B9C6D8">em definição</span></a>
+    <a href="Aprovacoes.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 3 3 5-6"></path></svg><span>Aprovações</span></a>
+    <a href="Relatorios.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M21 12A9 9 0 1 1 12 3v9z"></path><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"></path></svg><span>Relatórios</span></a>
+    <a href="Usuarios.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20a6.5 6.5 0 0 1 13 0"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7"></path><path d="M18 14a6 6 0 0 1 3.5 6"></path></svg><span>Unidades e usuários</span></a>
+    <a href="#" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg><span>Obrigações fiscais</span><span style="margin-left:auto;font-size:10px;color:#B9C6D8">em breve</span></a>
+    </nav>
+  <main style="flex:999 1 560px;min-width:0;padding:24px 32px 40px;box-sizing:border-box;display:flex;flex-direction:column;gap:16px">
+    <header style="display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-end">
+      <div>
+        <div style="font-size:12px;color:#5B6678"><a href="Main.dc.html">Início</a> › Calendário</div>
+        <h1 style="margin:4px 0 0;font-size:26px;color:{{t.ink}}">Calendário · dezembro de 2026</h1>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <div role="group" aria-label="Visualização" style="display:flex;border:1px solid #C9D2DE;border-radius:10px;overflow:hidden;background:#fff">
+          <sc-for list="{{views}}" as="v" hint-placeholder-count="4"><button aria-pressed="{{v.on}}" style="height:42px;padding:0 14px;border:0;font-size:14px;cursor:pointer;background:{{v.bg}};color:{{v.color}}">{{v.label}}</button></sc-for>
+        </div>
+        <button style="height:44px;padding:0 16px;border:0;border-radius:10px;background:{{t.primary}};font-size:14px;color:#fff;font-weight:600;cursor:pointer">+ Novo compromisso</button>
+      </div>
+    </header>
+
+    <div role="tablist" aria-label="Calendários" style="display:flex;flex-wrap:wrap;gap:8px">
+      <sc-for list="{{cals}}" as="c" hint-placeholder-count="12"><button role="tab" aria-selected="{{c.on}}" style="height:36px;padding:0 12px;border-radius:18px;font-size:13px;cursor:pointer;border:1px solid {{c.border}};background:{{c.bg}};color:{{c.color}};font-weight:{{c.weight}}">{{c.label}}</button></sc-for>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+      <section aria-label="Mês" style="flex:999 1 600px;min-width:0;background:#fff;border:1px solid #E1E6EE;border-radius:12px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:#F8FAFC;border-bottom:1px solid #E1E6EE;font-size:12px;font-weight:600;color:#5B6678">
+          <sc-for list="{{dows}}" as="d" hint-placeholder-count="7"><div style="padding:8px 10px">{{d}}</div></sc-for>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr))">
+          <sc-for list="{{cells}}" as="c" hint-placeholder-count="35">
+            <div style="min-height:112px;border-right:1px solid #EEF1F5;border-bottom:1px solid #EEF1F5;padding:6px;box-sizing:border-box;background:{{c.bg}};display:flex;flex-direction:column;gap:3px">
+              <div style="font-size:12px;font-weight:600;color:{{c.numColor}}">{{c.n}}</div>
+              <sc-for list="{{c.ev}}" as="e" hint-placeholder-count="1"><div style="font-size:11px;line-height:1.3;padding:2px 5px;border-radius:4px;background:{{e.bg}};color:{{e.color}};border-left:3px solid {{e.bar}}">{{e.t}}</div></sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <aside style="flex:1 1 280px;min-width:0;display:flex;flex-direction:column;gap:16px">
+        <section style="background:#fff;border:1px solid #E1E6EE;border-radius:12px;padding:16px 18px">
+          <div style="font-size:12px;color:#5B6678">Compromisso · COFIT</div>
+          <h2 style="margin:4px 0 6px;font-size:17px;color:{{t.ink}}">Reunião de planejamento da fiscalização</h2>
+          <div style="font-size:13px;color:#3A4557;line-height:1.6">Qui, 10/12 · 09:00–10:30<br>Sala de reuniões da DAT</div>
+          <div style="font-size:12px;color:#5B6678;margin-top:12px">Participantes</div>
+          <div style="font-size:13px;line-height:1.8">Diretor da DAT<br>Coordenador da COFIT<br>Servidor A · Servidor E</div>
+          <div style="display:flex;gap:8px;margin-top:12px"><button style="flex:1;height:44px;border:1px solid #C9D2DE;border-radius:10px;background:#fff;font-size:14px;color:{{t.ink}};cursor:pointer">Editar</button><button style="flex:1;height:44px;border:1px solid #C9D2DE;border-radius:10px;background:#fff;font-size:14px;color:{{t.ink}};cursor:pointer">Participantes</button></div>
+        </section>
+        <section style="background:#fff;border:1px solid #E1E6EE;border-radius:12px;padding:16px 18px;font-size:13px;line-height:1.9">
+          <h2 style="margin:0 0 6px;font-size:15px;color:{{t.ink}}">Legenda</h2>
+          <sc-for list="{{legend}}" as="l" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:8px"><span aria-hidden="true" style="width:12px;height:12px;border-radius:3px;background:{{l.c}}"></span>{{l.t}}</div></sc-for>
+        </section>
+        <section style="background:#EEF3FB;border:1px solid #CFDCF2;border-radius:12px;padding:14px 16px;font-size:13px;line-height:1.6;color:#1D3A66">
+          <strong>O que cada perfil vê aqui</strong><br>Secretária: todos os calendários e o geral.<br>Diretor: as coordenadorias da diretoria.<br>Coordenador: a própria unidade.<br>Funcionário: só o que o inclui, sem editar.
+        </section>
+      </aside>
+    </div>
+    <p style="margin:0;font-size:12px;color:#5B6678">Protótipo com dados fictícios. Feriados municipais vêm do cadastro de feriados.</p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tema":{"editor":"enum","options":["marinho","petroleo","indigo","ardosia"],"default":"indigo","section":"Cores"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const THEMES = { marinho: { nav: '#0F2A4A', ink: '#0F2A4A', primary: '#1D5FD1', logo: '#F2B544' }, petroleo: { nav: '#0B3442', ink: '#0B3442', primary: '#0E7490', logo: '#F2B544' }, indigo: { nav: '#18215A', ink: '#1A2660', primary: '#3A57E8', logo: '#8FD3FF' }, ardosia: { nav: '#1E293B', ink: '#1E3A5F', primary: '#2563EB', logo: '#93C5FD' } }; const t = THEMES[this.props.tema] || THEMES.indigo;
+    const items = [['Painel','','Main.dc.html'],['Demandas','','#'],['Calendário','','#'],['Contratos de locação','','Contrato.dc.html'],['Unidades consumidoras','','#'],['Férias e folgas','','Ferias.dc.html'],['Folhas de ponto','','#'],['Produtividade','em definição','#'],['Aprovações','','#'],['Relatórios','','#'],['Unidades e usuários','','#'],['Obrigações fiscais','em breve','#']];
+    const menu = items.map(([label, tag, href], i) => ({ label, tag, href, color: i === 2 ? '#fff' : '#DCE4F0', bg: i === 2 ? t.primary : 'transparent' }));
+    const views = ['Mês','Semana','Dia','Lista'].map((label, i) => ({ label, on: i === 0 ? 'true' : 'false', bg: i === 0 ? t.ink : '#fff', color: i === 0 ? '#fff' : t.ink }));
+    const cals = ['Todos','Geral do Gabinete','DAT','COACAM','COFIT','COAC','COCMI','DEFC','CONTA','COEF','PAV e Ordem Cronológica','ASPLAN','ASTIN','Jurídica'].map((label, i) => {
+      const on = i === 4;
+      return { label, on: on ? 'true' : 'false', bg: on ? t.ink : '#fff', color: on ? '#fff' : t.ink, border: on ? t.ink : '#C9D2DE', weight: on ? '600' : '400' };
+    });
+    const T = { d: ['#E6EEFB','#1D4FB0',t.primary], c: ['#EAF4EE','#1E6B45','#1E7B4F'], p: ['#FDF1DC','#8A4B00','#C77700'], f: ['#F1F2F4','#3A4557','#8A94A6'] };
+    const ev = { 1: [['d','Relatório de fiscalização ISS']], 3: [['c','Visita técnica – contribuinte']], 7: [['p','Prazo: autos de infração']], 10: [['c','Reunião de planejamento']], 14: [['d','Revisão do passivo de ISS'],['p','Prazo interno DAT']], 17: [['c','Treinamento NFS-e']], 21: [['d','Plano de ações 2027']], 25: [['f','Natal']], 29: [['p','Fechamento do mês']] };
+    const cells = [];
+    for (let i = 0; i < 35; i++) {
+      const n = i - 1; const inMonth = n >= 1 && n <= 31; const dow = i % 7;
+      const list = (inMonth && ev[n] ? ev[n] : []).map(([k, t]) => ({ t, bg: T[k][0], color: T[k][1], bar: T[k][2] }));
+      cells.push({ n: inMonth ? String(n) : (n < 1 ? String(30 + n) : String(n - 31)), ev: list, bg: !inMonth ? '#FAFBFC' : (dow === 0 || dow === 6 ? '#F8FAFC' : '#fff'), numColor: inMonth ? '#1B2433' : '#A3ACBA' });
+    }
+    const legend = [{ c: t.primary, t: 'Demanda (prazo de entrega)' }, { c: '#1E7B4F', t: 'Compromisso / reunião' }, { c: '#C77700', t: 'Prazo interno ou legal' }, { c: '#8A94A6', t: 'Feriado (não conta como dia útil)' }];
+    return { t, menu, views, cals, dows: ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'], cells, legend };
+  }
+}
+</script>
+</body>
+</html>

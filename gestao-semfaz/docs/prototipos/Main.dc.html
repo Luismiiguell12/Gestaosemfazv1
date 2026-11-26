@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Painel da Secretária</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F4F6F9;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#1B2433}
+a{color:#3A57E8}a:hover{color:#1A2660}
+button,select{font-family:inherit}
+</style>
+</helmet>
+<div style="display:flex;flex-wrap:wrap;min-height:1120px;background:#F4F6F9">
+  <nav aria-label="Menu principal" style="flex:1 1 230px;max-width:100%;background:{{t.nav}};color:#DCE4F0;padding:24px 14px;box-sizing:border-box;display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;align-items:center;gap:10px;padding:0 8px 22px"><svg role="img" aria-label="Logo Gestão SEMFAZ" width="38" height="38" viewBox="0 0 40 40" style="flex:none"><rect x="0" y="0" width="40" height="40" rx="10" fill="{{t.logo}}"></rect><path d="M28 13.5A10 10 0 1 0 30 21h-9" fill="none" stroke="{{t.nav}}" stroke-width="3.6" stroke-linecap="round"></path><rect x="17" y="24" width="3" height="5" rx="1" fill="{{t.nav}}"></rect><rect x="21.5" y="21" width="3" height="8" rx="1" fill="{{t.nav}}"></rect></svg><div><div style="font-weight:700;color:#fff;font-size:17px;letter-spacing:.2px">Gestão SEMFAZ</div><div style="font-size:11px;color:#B9C6D8">Prefeitura de Lagarto/SE</div></div></div>
+    <a href="#" aria-current="page" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;color:#FFFFFF;background:{{t.primary}}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg><span>Painel</span></a>
+    <a href="Demandas.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><path d="m3 6 1.5 1.5L7 5"></path><path d="m3 12 1.5 1.5L7 11"></path><path d="m3 18 1.5 1.5L7 17"></path></svg><span>Demandas</span></a>
+    <a href="Calendario.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M8 2v4"></path><path d="M16 2v4"></path><path d="M3 10h18"></path></svg><span>Calendário</span></a>
+    <a href="Contrato.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path><path d="M9 13h6"></path><path d="M9 17h6"></path></svg><span>Contratos de locação</span></a>
+    <a href="UnidadesConsumidoras.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M13 2 4 14h7l-1 8 9-12h-7z"></path></svg><span>Unidades consumidoras</span></a>
+    <a href="Ferias.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.9 4.9 1.4 1.4"></path><path d="m17.7 17.7 1.4 1.4"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m4.9 19.1 1.4-1.4"></path><path d="m17.7 6.3 1.4-1.4"></path></svg><span>Férias e folgas</span></a>
+    <a href="FolhasPonto.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>Folhas de ponto</span></a>
+    <a href="Produtividade.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M3 3v18h18"></path><path d="m7 15 4-4 3 3 5-6"></path></svg><span>Produtividade</span><span style="margin-left:auto;font-size:10px;color:#B9C6D8">em definição</span></a>
+    <a href="Aprovacoes.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 3 3 5-6"></path></svg><span>Aprovações</span></a>
+    <a href="Relatorios.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M21 12A9 9 0 1 1 12 3v9z"></path><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"></path></svg><span>Relatórios</span></a>
+    <a href="Usuarios.dc.html" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20a6.5 6.5 0 0 1 13 0"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7"></path><path d="M18 14a6 6 0 0 1 3.5 6"></path></svg><span>Unidades e usuários</span></a>
+    <a href="#" style="display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:400;color:#DCE4F0;background:transparent"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg><span>Obrigações fiscais</span><span style="margin-left:auto;font-size:10px;color:#B9C6D8">em breve</span></a>
+    </nav>
+  <main style="flex:999 1 560px;min-width:0;padding:24px 32px 40px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px">
+    <header style="display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-end">
+      <div>
+        <div style="font-size:13px;color:#5B6678">Quinta-feira, 26 de novembro de 2026</div>
+        <h1 style="margin:2px 0 0;font-size:26px;color:{{t.ink}}">Bom dia, Secretária</h1>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <label style="display:flex;align-items:center;gap:8px;height:44px;padding:0 12px;border:1px solid #C9D2DE;border-radius:10px;background:#fff;min-width:260px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6678" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><input type="search" aria-label="Busca geral" placeholder="Buscar contrato, servidor, demanda…" style="border:0;outline:0;font:inherit;font-size:14px;flex:1;min-width:0"></label>
+        <button aria-label="Notificações (4 novas)" style="position:relative;width:44px;height:44px;border:1px solid #C9D2DE;border-radius:10px;background:#fff;cursor:pointer"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{t.ink}}" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg><span style="position:absolute;top:-6px;right:-6px;background:#B3261E;color:#fff;font-size:11px;font-weight:700;border-radius:10px;padding:1px 6px">4</span></button>
+      </div>
+    </header>
+
+    <section aria-label="O que pede atenção hoje" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px">
+      <sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+        <a href="{{k.href}}" style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #E1E6EE;border-radius:12px;padding:14px 16px;text-decoration:none;color:#1B2433">
+          <span style="width:46px;height:46px;border-radius:12px;flex:none;background:{{k.bg}};color:{{k.fg}};font-size:20px;font-weight:700;display:flex;align-items:center;justify-content:center">{{k.v}}</span>
+          <span style="font-size:14px;line-height:1.3"><strong>{{k.l}}</strong><br><span style="font-size:12px;color:#5B6678">{{k.s}}</span></span>
+        </a>
+      </sc-for>
+    </section>
+
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+      <section aria-label="Saúde das unidades" style="flex:999 1 600px;min-width:0;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px">
+          <h2 style="margin:0;font-size:18px;color:{{t.ink}}">Como estão as unidades</h2>
+          <div style="display:flex;gap:14px;font-size:12px;color:#3A4557">
+            <span><span aria-hidden="true" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1E7B4F"></span> Em dia</span>
+            <span><span aria-hidden="true" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#C77700"></span> Prazo apertado</span>
+            <span><span aria-hidden="true" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#B3261E"></span> Com atraso</span>
+          </div>
+        </div>
+        <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+          <div style="background:#fff;border:1px solid #E1E6EE;border-radius:14px;padding:16px 18px">
+            <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:baseline;margin-bottom:12px">
+              <h3 style="margin:0;font-size:15px;color:{{t.ink}}">{{g.name}}</h3>
+              <span style="font-size:12px;color:#5B6678">{{g.sum}}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px">
+              <sc-for list="{{g.units}}" as="u" hint-placeholder-count="4">
+                <a href="Demandas.dc.html" style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:10px;border:1px solid #E1E6EE;border-left:5px solid {{u.edge}};background:{{u.tint}};text-decoration:none;color:#1B2433">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><strong style="font-size:14px">{{u.n}}</strong><span style="font-size:11px;font-weight:600;color:{{u.edge}}">{{u.label}}</span></div>
+                  <div style="display:flex;align-items:baseline;gap:6px"><span style="font-size:28px;font-weight:700;line-height:1;color:{{u.lateColor}}">{{u.late}}</span><span style="font-size:12px;color:#5B6678">{{u.lateTxt}}</span></div>
+                  <div aria-hidden="true" style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:#EEF1F5;gap:2px">
+                    <div style="flex:{{u.todo}};background:#B9C7F4"></div><div style="flex:{{u.doing}};background:{{t.primary}}"></div><div style="flex:{{u.done}};background:#1E7B4F"></div>
+                  </div>
+                  <div style="font-size:11px;color:#5B6678">{{u.todo}} a fazer · {{u.doing}} em andamento · {{u.done}} concluídas</div>
+                </a>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </section>
+
+      <aside style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:16px">
+        <section style="background:#fff;border:1px solid #E1E6EE;border-radius:14px;padding:16px 18px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><h2 style="margin:0;font-size:16px;color:{{t.ink}}">Aguardando sua aprovação</h2><a href="Aprovacoes.dc.html" style="font-size:13px">Abrir</a></div>
+          <sc-for list="{{approvals}}" as="a" hint-placeholder-count="3">
+            <a href="Aprovacoes.dc.html" style="display:block;border-top:1px solid #EEF1F5;padding:9px 0;margin-top:8px;font-size:13px;text-decoration:none;color:#1B2433"><strong>{{a.t}}</strong><br><span style="color:#5B6678">{{a.m}}</span></a>
+          </sc-for>
+        </section>
+        <section style="background:#fff;border:1px solid #E1E6EE;border-radius:14px;padding:16px 18px">
+          <h2 style="margin:0 0 6px;font-size:16px;color:{{t.ink}}">Contratos perto do vencimento</h2>
+          <sc-for list="{{contracts}}" as="c" hint-placeholder-count="4">
+            <a href="Contrato.dc.html" style="display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-top:1px solid #EEF1F5;text-decoration:none;color:#1B2433;font-size:13px"><span><strong>{{c.num}}</strong><br><span style="color:#5B6678">{{c.place}}</span></span><span style="align-self:center;white-space:nowrap;font-size:12px;font-weight:600;padding:3px 8px;border-radius:10px;background:{{c.bg}};color:{{c.color}}">{{c.days}}</span></a>
+          </sc-for>
+        </section>
+        <section style="background:#fff;border:1px solid #E1E6EE;border-radius:14px;padding:16px 18px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><h2 style="margin:0 0 6px;font-size:16px;color:{{t.ink}}">Próximos compromissos</h2><a href="Calendario.dc.html" style="font-size:13px">Calendário</a></div>
+          <sc-for list="{{events}}" as="e" hint-placeholder-count="3">
+            <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid #EEF1F5;font-size:13px"><div style="width:44px;text-align:center;color:{{t.primary}};font-weight:700;line-height:1.1">{{e.day}}<br><span style="font-size:11px;font-weight:500">{{e.mon}}</span></div><div><div style="font-weight:600">{{e.title}}</div><div style="color:#5B6678">{{e.meta}}</div></div></div>
+          </sc-for>
+        </section>
+        <section style="background:#fff;border:1px solid #E1E6EE;border-radius:14px;padding:16px 18px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><h2 style="margin:0 0 6px;font-size:16px;color:{{t.ink}}">Ausências neste mês</h2><a href="Ferias.dc.html" style="font-size:13px">Escala</a></div>
+          <sc-for list="{{away}}" as="w" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #EEF1F5;font-size:13px"><span aria-hidden="true" style="width:32px;height:32px;border-radius:50%;background:#DCE4F0;color:{{t.ink}};font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">{{w.i}}</span><span><strong>{{w.n}}</strong> · {{w.u}}<br><span style="color:#5B6678">{{w.k}} · substituto: {{w.s}}</span></span></div>
+          </sc-for>
+        </section>
+      </aside>
+    </div>
+    <p style="margin:0;font-size:12px;color:#5B6678">Protótipo com dados fictícios. Clique numa unidade para abrir as demandas dela.</p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tema":{"editor":"enum","options":["marinho","petroleo","indigo","ardosia"],"default":"indigo","section":"Cores"},"$preview":{"width":1440,"height":1120}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const THEMES = { marinho: { nav: '#0F2A4A', ink: '#0F2A4A', primary: '#1D5FD1', logo: '#F2B544' }, petroleo: { nav: '#0B3442', ink: '#0B3442', primary: '#0E7490', logo: '#F2B544' }, indigo: { nav: '#18215A', ink: '#1A2660', primary: '#3A57E8', logo: '#8FD3FF' }, ardosia: { nav: '#1E293B', ink: '#1E3A5F', primary: '#2563EB', logo: '#93C5FD' } }; const t = THEMES[this.props.tema] || THEMES.indigo;
+    const menu = [];
+    const kpis = [
+      { v: '7', l: 'Demandas atrasadas', s: 'em 4 unidades', bg: '#FCE8E6', fg: '#B3261E', href: 'Demandas.dc.html' },
+      { v: '3', l: 'Aprovações para você', s: 'alterações de dados', bg: '#E6ECFF', fg: t.primary, href: 'Aprovacoes.dc.html' },
+      { v: '5', l: 'Contratos vencendo', s: '2 em menos de 30 dias', bg: '#FDF1DC', fg: '#8A4B00', href: 'Contrato.dc.html' },
+      { v: '12', l: 'Aluguéis pendentes', s: 'R$ 48.300,00 no mês', bg: '#EEF1F5', fg: t.ink, href: 'Contrato.dc.html' }
+    ];
+    const H = {
+      ok: { edge: '#1E7B4F', tint: '#FFFFFF', label: 'Em dia' },
+      warn: { edge: '#C77700', tint: '#FFFDF8', label: 'Prazo apertado' },
+      late: { edge: '#B3261E', tint: '#FFFAFA', label: 'Com atraso' }
+    };
+    const u = (n, h, late, todo, doing, done) => ({ n, ...H[h], late: String(late), lateTxt: late === 1 ? 'atrasada' : 'atrasadas', lateColor: late ? '#B3261E' : '#1E7B4F', todo, doing, done });
+    const groups = [
+      { name: 'DAT · Administração Tributária', sum: '4 atrasadas · 81% no prazo', units: [u('COACAM','warn',1,2,3,6), u('COFIT','late',2,3,4,7), u('COAC','ok',0,2,3,5), u('COCMI','late',1,2,2,3)] },
+      { name: 'DEFC · Execução Financeira e Contabilidade', sum: '3 atrasadas · 80% no prazo', units: [u('CONTA','late',2,3,4,8), u('COEF','warn',1,3,4,7)] },
+      { name: 'Ligadas ao Gabinete', sum: 'nenhum atraso', units: [u('Gabinete','ok',0,2,1,4), u('PAV e Ordem Cronológica','ok',0,1,2,6), u('ASPLAN','ok',0,1,1,2), u('ASTIN','ok',0,2,1,3), u('Assessoria Jurídica','warn',0,1,2,2)] }
+    ];
+    const approvals = [
+      { t: 'Contrato 031/2025 · valor e fiscal', m: 'Servidor C · ontem' },
+      { t: 'Nova unidade: Núcleo de IBS', m: 'Diretor da DAT · 24/11' },
+      { t: 'Acesso extra à COEF', m: 'Diretor da DEFC · 23/11' }
+    ];
+    const contracts = [
+      { num: 'Contrato 014/2024', place: 'Imóvel da COAC', days: '18 dias', bg: '#FCE8E6', color: '#B3261E' },
+      { num: 'Contrato 022/2024', place: 'Arquivo central', days: '27 dias', bg: '#FCE8E6', color: '#B3261E' },
+      { num: 'Contrato 031/2025', place: 'Anexo DEFC', days: '54 dias', bg: '#FDF1DC', color: '#8A4B00' },
+      { num: 'Contrato 040/2025', place: 'Depósito', days: '82 dias', bg: '#FDF1DC', color: '#8A4B00' }
+    ];
+    const events = [
+      { day: '27', mon: 'nov', title: 'Reunião de diretores', meta: '09:00 · Gabinete · 4 participantes' },
+      { day: '28', mon: 'nov', title: 'Prazo: conciliação de receitas', meta: 'CONTA · 2 responsáveis' },
+      { day: '02', mon: 'dez', title: 'Plantão PAV – Receita Federal', meta: 'Coord. PAV · 3 participantes' }
+    ];
+    const away = [
+      { i: 'SA', n: 'Servidor A', u: 'COFIT', k: 'Férias 03–22/11', s: 'Servidor F' },
+      { i: 'SB', n: 'Servidor B', u: 'CONTA', k: 'Licença-prêmio 10–30/11', s: 'Servidor L' }
+    ];
+    return { t, menu, kpis, groups, approvals, contracts, events, away };
+  }
+}
+</script>
+</body>
+</html>
