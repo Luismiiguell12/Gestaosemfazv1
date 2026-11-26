@@ -13,6 +13,9 @@ grant usage on schema public to anon, authenticated, service_role;
 -- padrão do Supabase: a API recebe privilégios amplos e a RLS filtra (as migrations revogam)
 grant all on all tables in schema public to anon, authenticated, service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+-- Supabase também concede EXECUTE em funções novas de public a esses papéis
+alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 
 create schema if not exists auth;
 grant usage on schema auth to anon, authenticated, service_role, supabase_auth_admin;
