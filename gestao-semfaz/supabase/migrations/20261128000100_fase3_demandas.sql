@@ -119,7 +119,7 @@ create policy demanda_resp_ler on public.demanda_responsaveis for select to auth
 create policy demanda_check_ler on public.demanda_checklist for select to authenticated using ((select app.pode_ver_demanda(demanda_id)));
 create policy demanda_hist_ler on public.demanda_historico for select to authenticated using ((select app.pode_ver_demanda(demanda_id)));
 create policy demanda_part_ler on public.demanda_participantes for select to authenticated using ((select app.pode_ver_demanda(demanda_id)));
-grant execute on function app.pode_ver_demanda(uuid) to authenticated;
+grant execute on function app.pode_ver_demanda(uuid), app.pode_gerir_demanda(uuid), app.eh_responsavel(uuid) to authenticated;
 
 create or replace function app.historico(p_demanda uuid, p_acao text, p_detalhes jsonb default '{}'::jsonb)
 returns void language sql security definer set search_path = ''
