@@ -90,6 +90,18 @@ begin
   if not found then perform app.erro('Fatura não encontrada ou já paga.', 'P0002'); end if;
 end $$;
 
+-- competência: mm/aaaa ou data ISO (célula de data do Excel)
+create or replace function app.competencia_planilha(t text)
+returns date language plpgsql immutable set search_path = ''
+as $$
+declare v text := btrim(coalesce(t, ''));
+begin
+  if v ~ '^\d{1,2}/\d{4}$' then return to_date('01/' || v, 'DD/MM/YYYY'); end if;
+  if v ~ '^\d{4}-\d{2}(-\d{2})?' then return date_trunc('month', to_date(left(v, 7) || '-01', 'YYYY-MM-DD'))::date; end if;
+  return null;
+exception when others then return null;
+end $$;
+
 -- importação de faturas: prévia → tudo ou nada. Colunas provisórias (modelo oficial pendente, seção 9)
 create or replace function app.validar_planilha_faturas(p_linhas jsonb)
 returns table (linha integer, campo text, mensagem text)
@@ -109,12 +121,12 @@ begin
       select u.id into v_uc from public.unidades_consumidoras u where u.fornecedor = v_forn::public.fornecedor_uc and u.numero = btrim(coalesce(r ->> 'uc', ''));
       if v_uc is null then return query select n, 'uc', 'Unidade consumidora não cadastrada.'; end if;
     end if;
-    v_comp := case when btrim(coalesce(r ->> 'competencia', '')) ~ '^\d{1,2}/\d{4}$' then to_date('01/' || btrim(r ->> 'competencia'), 'DD/MM/YYYY') else null end;
+    v_comp := app.competencia_planilha(r ->> 'competencia');
     if v_comp is null then return query select n, 'competencia', 'Competência inválida (use mm/aaaa).';
     elsif v_uc is not null and exists (select 1 from public.faturas f where f.uc_id = v_uc and f.competencia = v_comp) then
       return query select n, 'competencia', 'Fatura dessa competência já lançada.';
     elsif (select count(*) from jsonb_array_elements(p_linhas) x where lower(btrim(x ->> 'fornecedor')) = lower(btrim(r ->> 'fornecedor'))
-              and btrim(x ->> 'uc') = btrim(r ->> 'uc') and btrim(x ->> 'competencia') = btrim(r ->> 'competencia')) > 1 then
+              and btrim(x ->> 'uc') = btrim(r ->> 'uc') and app.competencia_planilha(x ->> 'competencia') = v_comp) > 1 then
       return query select n, 'competencia', 'Fatura repetida na planilha.';
     end if;
     if app.valor_planilha(r ->> 'valor') is null or app.valor_planilha(r ->> 'valor') <= 0 then return query select n, 'valor', 'Valor inválido.'; end if;
@@ -146,7 +158,7 @@ begin
   for r in select * from jsonb_array_elements(p_linhas) loop
     v_forn := lower(btrim(r ->> 'fornecedor')); v_forn := case v_forn when 'iguá' then 'igua' else v_forn end;
     insert into public.faturas (uc_id, competencia, consumo, valor, vencimento, pago_em, registrado_por, origem, criado_por)
-    select u.id, to_date('01/' || btrim(r ->> 'competencia'), 'DD/MM/YYYY'), app.valor_planilha(r ->> 'consumo'), app.valor_planilha(r ->> 'valor'),
+    select u.id, app.competencia_planilha(r ->> 'competencia'), app.valor_planilha(r ->> 'consumo'), app.valor_planilha(r ->> 'valor'),
            app.data_planilha(r ->> 'vencimento'), app.data_planilha(r ->> 'pago_em'),
            case when app.data_planilha(r ->> 'pago_em') is not null then auth.uid() end, 'importacao', auth.uid()
       from public.unidades_consumidoras u where u.fornecedor = v_forn::public.fornecedor_uc and u.numero = btrim(r ->> 'uc');

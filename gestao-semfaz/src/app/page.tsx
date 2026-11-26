@@ -9,7 +9,7 @@ import { ehGestorGeral, temModulo, useSessao, type InfoSessao } from '@/lib/sess
 import { useConsulta } from '@/lib/useConsulta';
 import { ABERTOS, ROTULO_ORIGEM_LONGO, ROTULO_STATUS, textoPrazo, TOM_STATUS, type DemandaLista } from '@/lib/demandas';
 import { agruparParaPainel, caminho, type Unidade } from '@/lib/estrutura';
-import { dataCurta, dataExtenso, iniciais, primeiroNome, quando, saudacao } from '@/lib/formato';
+import { dataCurta, dataExtenso, iniciais, moeda, primeiroNome, quando, saudacao } from '@/lib/formato';
 
 export default function PainelPage() {
   return (
@@ -60,6 +60,8 @@ function ListaEventos({ eventos }: { eventos: EventoPainel[] }) {
   })}</>;
 }
 
+interface PainelContratos { vencendo: number; vencendo_30: number; vencidos: number; alugueis_pendentes: number; alugueis_pendentes_valor: number;
+  proximos: { id: string; numero: string; imovel_descricao: string; fim_vigencia: string; dias: number }[] }
 interface Pedido { id: string; resumo: string; solicitante_id: string; solicitante_nome: string; criado_em: string }
 
 // ===== Painel da Secretária / chefia (Main.dc.html) =====
@@ -83,14 +85,17 @@ function PainelGestao({ info }: { info: InfoSessao }) {
   const IND = new Map(((ind.dados as IndUnidade[] | null) ?? []).map((x) => [x.unidade_id, x]));
   const eventos = useConsulta(async () => supabase.rpc('eventos_calendario', { p_inicio: hojeIso(), p_fim: emDias(30) }), []);
   const proximos = ((eventos.dados as EventoPainel[] | null) ?? []).filter((e) => e.tipo === 'compromisso' || e.tipo === 'prazo').slice(0, 3);
+  const comContratos = temModulo(info, 'contratos');
+  const pc = useConsulta(async () => (comContratos ? supabase.rpc('painel_contratos') : Promise.resolve({ data: null, error: null })), [comContratos]);
+  const PC = pc.dados as PainelContratos | null;
   const totalAtraso = [...IND.values()].reduce((a, x) => a + x.atrasadas, 0);
   const unidadesAtraso = [...IND.values()].filter((x) => x.atrasadas > 0).length;
 
   const kpis = [
     { v: String(totalAtraso), l: 'Demandas atrasadas', s: unidadesAtraso ? `em ${unidadesAtraso} unidade${unidadesAtraso > 1 ? 's' : ''}` : 'nenhuma unidade', bg: 'var(--selo-critico-bg)', fg: 'var(--cor-critico)', href: '/demandas' },
     { v: String(lista.length), l: geral ? 'Aprovações para você' : 'Pedidos aguardando', s: geral ? 'alterações de dados' : 'enviados por você', bg: 'var(--selo-primaria-bg)', fg: 'var(--cor-primaria)', href: '/aprovacoes' },
-    { v: '—', l: 'Contratos vencendo', s: 'disponível na Fase 4', bg: 'var(--selo-alerta-bg)', fg: 'var(--selo-alerta-fg)' },
-    { v: '—', l: 'Aluguéis pendentes', s: 'disponível na Fase 4', bg: 'var(--selo-neutro-bg)', fg: 'var(--cor-texto-forte)' },
+    { v: PC ? String(PC.vencendo) : '—', l: 'Contratos vencendo', s: PC ? (PC.vencendo_30 ? `${PC.vencendo_30} em menos de 30 dias` : 'nos próximos 90 dias') : 'sem acesso a contratos', bg: 'var(--selo-alerta-bg)', fg: 'var(--selo-alerta-fg)', href: PC ? '/contratos' : undefined },
+    { v: PC ? String(PC.alugueis_pendentes) : '—', l: 'Aluguéis pendentes', s: PC ? `${moeda(PC.alugueis_pendentes_valor)} vencidos` : 'sem acesso a contratos', bg: 'var(--selo-neutro-bg)', fg: 'var(--cor-texto-forte)', href: PC ? '/contratos' : undefined },
   ];
 
   return (
@@ -165,7 +170,13 @@ function PainelGestao({ info }: { info: InfoSessao }) {
           </section>
           <section className="cartao cartao-xl">
             <h2 style={{ fontSize: 16, marginBottom: 6 }}>Contratos perto do vencimento</h2>
-            <EstadoVazio>Disponível na Fase 4 (contratos de locação).</EstadoVazio>
+            {!comContratos ? <EstadoVazio>Sem acesso ao módulo de contratos.</EstadoVazio> : !PC?.proximos.length ? <EstadoVazio>Nenhum contrato vigente.</EstadoVazio>
+              : PC.proximos.map((c) => (
+                <Link key={c.id} href={`/contratos/ficha?id=${c.id}`} className="item-lista" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '9px 0', borderTop: '1px solid var(--cor-divisor)', textDecoration: 'none', color: 'var(--cor-texto)', fontSize: 13 }}>
+                  <span><strong>Contrato {c.numero}</strong><br /><span className="texto-suave">{c.imovel_descricao}</span></span>
+                  <span style={{ alignSelf: 'center' }}><Selo tom={c.dias <= 30 ? 'critico' : c.dias <= 90 ? 'alerta' : 'neutro'}>{c.dias} dias</Selo></span>
+                </Link>
+              ))}
           </section>
           <section className="cartao cartao-xl">
             <div className="cartao-topo"><h2 style={{ fontSize: 16, marginBottom: 6 }}>Próximos compromissos</h2><Link href="/calendario">Calendário</Link></div>
@@ -195,7 +206,7 @@ function PainelGestao({ info }: { info: InfoSessao }) {
           )}
         </aside>
       </div>
-      <p className="nota">Clique numa unidade para abrir as demandas dela. Contratos e aluguéis chegam na Fase 4.</p>
+      <p className="nota">Clique numa unidade para abrir as demandas dela.</p>
     </>
   );
 }

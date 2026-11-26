@@ -87,8 +87,9 @@ begin
     if v_prazo and v_fim <= (v_linha ->> 'fim_vigencia')::date then perform app.erro('A nova vigência deve ser depois do fim atual.', '22023'); end if;
     if v_altval and v_valor <= 0 then perform app.erro('Valor inválido.', '22023'); end if;
     if length(coalesce(p_dados ->> 'descricao', '')) > 2000 then perform app.erro('Descrição muito longa.', '22023'); end if;
-    v_antes := jsonb_strip_nulls(jsonb_build_object('fim_vigencia', case when v_prazo then v_linha -> 'fim_vigencia' end,
-                                                    'valor_mensal', case when v_altval then v_linha -> 'valor_mensal' end));
+    -- "como está" com as mesmas chaves do "como fica" (tela de aprovações)
+    v_antes := jsonb_strip_nulls(jsonb_build_object('novo_fim', case when v_prazo then v_linha -> 'fim_vigencia' end,
+                                                    'novo_valor', case when v_altval then v_linha -> 'valor_mensal' end));
     v_depois := jsonb_strip_nulls(jsonb_build_object('novo_fim', v_fim, 'novo_valor', v_valor, 'data_assinatura', nullif(p_dados ->> 'data_assinatura', ''),
                                                      'descricao', nullif(btrim(coalesce(p_dados ->> 'descricao', '')), '')));
     v_resumo := 'Aditivo de ' || case when v_prazo and v_altval then 'prazo e valor' when v_prazo then 'prazo' else 'valor' end

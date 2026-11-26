@@ -192,6 +192,7 @@ as $$
   select case when not app.acesso_contratos() then null else jsonb_build_object(
     'vencendo', (select count(*) from public.contratos where not encerrado and fim_vigencia between current_date and current_date
                    + coalesce((select (valor)::int from public.configuracoes where chave = 'contratos.dias_renovacao'), 90)),
+    'vencendo_30', (select count(*) from public.contratos where not encerrado and fim_vigencia between current_date and current_date + 30),
     'vencidos', (select count(*) from public.contratos where not encerrado and fim_vigencia < current_date),
     'alugueis_pendentes', (select count(*) from public.alugueis a join public.contratos c on c.id = a.contrato_id
                              where not c.encerrado and a.pago_em is null and a.vencimento <= current_date),

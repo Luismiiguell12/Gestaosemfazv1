@@ -41,3 +41,13 @@ export function diaSemana(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(y, m - 1, d)));
 }
+
+const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+export const moeda = (v: number | string | null | undefined) => (v === null || v === undefined || v === '' ? '—' : BRL.format(Number(v)));
+
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+/** '2026-10-01' → 'out/2026' */
+export function competencia(iso?: string | null): string {
+  const m = /^(\d{4})-(\d{2})/.exec(iso ?? '');
+  return m ? `${MESES[Number(m[2]) - 1]}/${m[1]}` : '—';
+}

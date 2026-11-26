@@ -25,6 +25,37 @@ export const COLUNAS_SALDOS: ColunaPlanilha[] = [
   { chave: 'folgas', rotulo: 'saldo de folgas', aliases: ['saldo de folgas', 'folgas', 'saldo folgas'], obrigatoria: true },
 ];
 
+// Contratos e faturas: colunas PROVISÓRIAS (modelo oficial pendente — seção 9)
+export const COLUNAS_CONTRATOS: ColunaPlanilha[] = [
+  { chave: 'numero', rotulo: 'número do contrato', aliases: ['numero do contrato', 'numero', 'contrato', 'n do contrato'], obrigatoria: true },
+  { chave: 'processo', rotulo: 'processo', aliases: ['processo', 'numero do processo', 'n do processo'], obrigatoria: false },
+  { chave: 'locador_tipo', rotulo: 'tipo do locador (PF/PJ)', aliases: ['tipo do locador pf pj', 'tipo do locador', 'pf pj', 'tipo'], obrigatoria: true },
+  { chave: 'locador_nome', rotulo: 'locador', aliases: ['locador', 'nome do locador'], obrigatoria: true },
+  { chave: 'locador_documento', rotulo: 'CPF/CNPJ do locador', aliases: ['cpf cnpj do locador', 'cpf cnpj', 'cpf', 'cnpj', 'documento'], obrigatoria: true },
+  { chave: 'locador_email', rotulo: 'e-mail do locador', aliases: ['e mail do locador', 'email do locador', 'email', 'e mail'], obrigatoria: false },
+  { chave: 'locador_telefone', rotulo: 'telefone do locador', aliases: ['telefone do locador', 'telefone'], obrigatoria: false },
+  { chave: 'imovel_descricao', rotulo: 'imóvel', aliases: ['imovel', 'descricao do imovel'], obrigatoria: true },
+  { chave: 'imovel_endereco', rotulo: 'endereço', aliases: ['endereco', 'endereco do imovel'], obrigatoria: false },
+  { chave: 'unidade', rotulo: 'unidade ocupante', aliases: ['unidade ocupante', 'unidade', 'sigla da unidade'], obrigatoria: false },
+  { chave: 'inicio', rotulo: 'início da vigência', aliases: ['inicio da vigencia', 'inicio'], obrigatoria: true },
+  { chave: 'fim', rotulo: 'fim da vigência', aliases: ['fim da vigencia', 'fim', 'termino'], obrigatoria: true },
+  { chave: 'valor_mensal', rotulo: 'valor mensal', aliases: ['valor mensal', 'valor', 'aluguel'], obrigatoria: true },
+  { chave: 'dia_vencimento', rotulo: 'dia de vencimento', aliases: ['dia de vencimento', 'vencimento', 'dia'], obrigatoria: false },
+  { chave: 'fiscal_matricula', rotulo: 'matrícula do fiscal', aliases: ['matricula do fiscal', 'fiscal matricula', 'fiscal'], obrigatoria: false },
+  { chave: 'indice_reajuste', rotulo: 'índice de reajuste', aliases: ['indice de reajuste', 'indice'], obrigatoria: false },
+  { chave: 'mes_database', rotulo: 'mês da data-base', aliases: ['mes da data base', 'data base', 'mes data base'], obrigatoria: false },
+];
+
+export const COLUNAS_FATURAS: ColunaPlanilha[] = [
+  { chave: 'fornecedor', rotulo: 'fornecedor', aliases: ['fornecedor', 'concessionaria'], obrigatoria: true },
+  { chave: 'uc', rotulo: 'unidade consumidora', aliases: ['unidade consumidora', 'uc', 'matricula', 'numero da uc'], obrigatoria: true },
+  { chave: 'competencia', rotulo: 'competência (mm/aaaa)', aliases: ['competencia mm aaaa', 'competencia', 'mes referencia', 'referencia'], obrigatoria: true },
+  { chave: 'consumo', rotulo: 'consumo', aliases: ['consumo', 'consumo kwh m3', 'kwh', 'm3'], obrigatoria: false },
+  { chave: 'valor', rotulo: 'valor', aliases: ['valor', 'valor da fatura'], obrigatoria: true },
+  { chave: 'vencimento', rotulo: 'vencimento', aliases: ['vencimento', 'data de vencimento'], obrigatoria: true },
+  { chave: 'pago_em', rotulo: 'pago em', aliases: ['pago em', 'data do pagamento', 'pagamento'], obrigatoria: false },
+];
+
 export const normalizarCabecalho = (t: string) =>
   t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
@@ -63,6 +94,9 @@ export function lerCsv(texto: string): string[][] {
 
 export interface ResultadoPlanilha { linhas: Record<string, string>[]; faltando: string[]; erro?: string }
 
+/** célula → texto; data do Excel vira aaaa-mm-dd (o banco aceita dd/mm/aaaa ou ISO) */
+export const celula = (v: unknown) => (v instanceof Date ? (isNaN(v.getTime()) ? '' : v.toISOString().slice(0, 10)) : String(v ?? '').trim());
+
 /** converte matriz (1ª linha = cabeçalho) em objetos com as chaves do sistema; nº da linha = linha na planilha */
 export function mapearColunas(matriz: unknown[][], colunas: ColunaPlanilha[]): ResultadoPlanilha {
   if (matriz.length < 2) return { linhas: [], faltando: [], erro: 'A planilha não tem linhas de dados.' };
@@ -77,7 +111,7 @@ export function mapearColunas(matriz: unknown[][], colunas: ColunaPlanilha[]): R
   if (faltando.length) return { linhas: [], faltando };
   const linhas = matriz.slice(1).map((l, n) => {
     const o: Record<string, string> = { linha: String(n + 2) };
-    for (const [chave, i] of idx) o[chave] = String(l[i] ?? '').trim().slice(0, 300);
+    for (const [chave, i] of idx) o[chave] = celula(l[i]).slice(0, 300);
     return o;
   }).filter((o) => Object.entries(o).some(([k, v]) => k !== 'linha' && v !== ''));
   return { linhas, faltando: [] };
