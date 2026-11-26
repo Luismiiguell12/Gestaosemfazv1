@@ -214,6 +214,43 @@ h1, h2, h3 { color: var(--cor-texto-forte); }
 .etapa[data-feita='true'] .etapa-num { background: var(--cor-positivo); color: #fff; }
 .etapa[data-atual='true'] .etapa-num { background: var(--cor-primaria); color: #fff; }
 
+/* ===== demandas (Demandas.dc.html) ===== */
+.quadro { display: grid; grid-template-columns: repeat(5, minmax(230px, 1fr)); gap: 14px; min-width: 1180px; }
+.coluna-quadro { background: var(--cor-coluna); border-radius: var(--raio-lg); padding: 12px; display: flex; flex-direction: column; gap: 10px; min-height: 120px; }
+.coluna-quadro[data-alvo='true'] { outline: 2px dashed var(--cor-borda-campo); }
+.coluna-quadro h2 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; }
+.coluna-quadro h2 span { color: var(--cor-texto-suave); font-weight: 500; }
+.cartao-demanda { background: #fff; border: 1px solid var(--cor-borda); border-top: 3px solid var(--cor-borda-campo); border-radius: var(--raio); padding: 12px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; }
+.cartao-demanda:hover { box-shadow: 0 2px 8px rgba(16, 24, 40, .08); }
+.avatar-mini { width: 26px; height: 26px; border-radius: 50%; background: var(--cor-avatar); color: var(--cor-texto-forte); border: 2px solid #fff; margin-right: -6px; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.chat { display: flex; flex-direction: column; gap: 10px; max-height: 520px; overflow-y: auto; padding: 4px 2px; }
+.msg { border: 1px solid var(--cor-borda); border-radius: var(--raio); padding: 10px 12px; font-size: 13px; background: #fff; }
+.msg.minha { background: var(--aviso-info-bg); border-color: var(--aviso-info-borda); }
+.msg.pedido { background: var(--aviso-alerta-bg); border-color: var(--aviso-alerta-borda); }
+.msg-topo { display: flex; justify-content: space-between; gap: 8px; color: var(--cor-texto-suave); font-size: 12px; margin-bottom: 4px; }
+.msg-texto { white-space: pre-wrap; word-break: break-word; }
+.feedback { margin-top: 8px; border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 600; }
+.feedback.aprovado { background: var(--selo-positivo-bg); color: var(--selo-positivo-fg); }
+.feedback.ajustar { background: var(--selo-alerta-bg); color: var(--selo-alerta-fg); }
+.feedback.refazer { background: var(--selo-critico-bg); color: var(--selo-critico-fg); }
+.etapa-check { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--cor-divisor); font-size: 14px; }
+.etapa-check input { width: 20px; height: 20px; margin-top: 1px; flex: none; }
+
+/* ===== calendário (Calendario.dc.html) ===== */
+.cal-dias { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.cal-cab { background: var(--cor-superficie-2); border-bottom: 1px solid var(--cor-borda); font-size: 12px; font-weight: 600; color: var(--cor-texto-suave); }
+.cal-cab > div { padding: 8px 10px; }
+.cal-cel { min-height: 112px; border-right: 1px solid var(--cor-divisor); border-bottom: 1px solid var(--cor-divisor); padding: 6px; display: flex; flex-direction: column; gap: 3px; background: #fff; }
+.cal-cel.fora { background: #FAFBFC; }
+.cal-cel.fds { background: var(--cor-superficie-2); }
+.cal-cel.hoje .cal-num { background: var(--cor-primaria); color: #fff; border-radius: 10px; padding: 0 6px; align-self: flex-start; }
+.cal-num { font-size: 12px; font-weight: 600; }
+.cal-ev { font-size: 11px; line-height: 1.3; padding: 2px 5px; border-radius: 4px; border: 0; border-left: 3px solid; text-align: left; cursor: pointer; font-family: inherit; width: 100%; }
+.cal-ev.demanda { background: #E6EEFB; color: #1D4FB0; border-left-color: var(--cor-primaria); }
+.cal-ev.compromisso { background: #EAF4EE; color: #1E6B45; border-left-color: var(--cor-positivo); }
+.cal-ev.prazo { background: #FDF1DC; color: #8A4B00; border-left-color: var(--cor-alerta); }
+.cal-ev.feriado { background: #F1F2F4; color: #3A4557; border-left-color: #8A94A6; }
+
 /* ===== responsivo: menu vira gaveta, tabelas viram cartões ===== */
 @media (max-width: 900px) {
   .conteudo { padding: 16px 16px 32px; }
