@@ -194,6 +194,26 @@ h1, h2, h3 { color: var(--cor-texto-forte); }
 .qr { display: flex; justify-content: center; padding: 8px; background: #fff; border: 1px solid var(--cor-borda); border-radius: var(--raio); }
 .carregando { padding: 40px; text-align: center; color: var(--cor-texto-suave); }
 
+/* ===== escala de férias (Ferias.dc.html) ===== */
+.grade-escala { display: grid; grid-template-columns: 220px repeat(12, minmax(0, 1fr)); border-bottom: 1px solid var(--cor-divisor); align-items: center; }
+.grade-escala.cabeca { font-size: 12px; font-weight: 600; color: var(--cor-texto-suave); border-bottom: 1px solid var(--cor-borda); }
+.grade-escala.cabeca > div { padding: 6px 4px; }
+.celula-escala { min-height: 40px; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 2px; }
+.marca-escala { height: 22px; border-radius: 5px; font-size: 10px; font-weight: 600; border: 0; cursor: pointer; font-family: inherit; padding: 0 2px; }
+.marca-escala.aprovado, .amostra.aprovado { background: var(--cor-primaria); color: #fff; }
+.marca-escala.pendente, .amostra.pendente { background: #fff; border: 2px dashed var(--cor-primaria); color: var(--selo-info-fg); }
+.marca-escala.licenca, .amostra.licenca { background: #7A4FB5; color: #fff; }
+.marca-escala.conflito, .amostra.conflito { background: var(--selo-critico-bg); border: 2px solid var(--cor-critico); color: var(--cor-critico); }
+.amostra { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; }
+
+/* ===== folhas de ponto (FolhasPonto.dc.html) ===== */
+.etapas { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.etapa { display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid var(--cor-borda); border-radius: var(--raio-lg); padding: 14px 16px; }
+.etapa[data-atual='true'] { border-color: var(--cor-primaria); }
+.etapa-num { width: 30px; height: 30px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; background: var(--selo-neutro-bg); color: var(--cor-texto-suave); }
+.etapa[data-feita='true'] .etapa-num { background: var(--cor-positivo); color: #fff; }
+.etapa[data-atual='true'] .etapa-num { background: var(--cor-primaria); color: #fff; }
+
 /* ===== responsivo: menu vira gaveta, tabelas viram cartões ===== */
 @media (max-width: 900px) {
   .conteudo { padding: 16px 16px 32px; }
@@ -212,7 +232,7 @@ h1, h2, h3 { color: var(--cor-texto-forte); }
   .tabela-cartoes tr { border: 1px solid var(--cor-borda); border-radius: var(--raio); padding: 8px 10px; margin-bottom: 10px; background: #fff; }
   .tabela-cartoes td { border: 0; padding: 4px 0; display: flex; gap: 10px; justify-content: space-between; }
   .tabela-cartoes td::before { content: attr(data-rotulo); color: var(--cor-texto-suave); font-size: 12px; font-weight: 600; flex: none; }
-  .kpis, .grade-perfis, .grade-3 { grid-template-columns: 1fr; }
+  .kpis, .grade-perfis, .grade-3, .etapas { grid-template-columns: 1fr; }
   .titulo { font-size: 22px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

@@ -8,6 +8,7 @@ export interface InfoSessao {
   autorizado: boolean;
   motivo?: 'sem_cadastro' | 'desativado';
   usuario_id?: string;
+  servidor_id?: string;
   perfil?: Perfil;
   nome?: string;
   cargo?: string;
