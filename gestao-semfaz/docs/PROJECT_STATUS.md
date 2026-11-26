@@ -49,6 +49,7 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 | D16 | Desvios de layout em "Unidades e usuários": links "+ Servidor" e "Solicitar alteração da unidade" no cartão da unidade; detalhes do servidor (pacote padrão, módulos extras com adicionar/remover, acessos, desativar) em janela ao clicar na linha | O prompt exige cadastrar servidor e mostrar pacote padrão e extras, e o protótipo não tem lugar para isso | **Sim** |
 | D17 | No celular, o botão do menu (gaveta) fica acima do título | Protótipo só tem versão desktop | **Sim** |
 | D18 | Testes de banco rodam em PostgreSQL 16 puro com shim do Supabase (`tests/db/shim`), assumindo o papel `authenticated` e as claims do JWT, como a API faz | Supabase local indisponível neste ambiente | Não |
+| D19 | MFA obrigatória virou configuração (`configuracoes.auth.mfa_obrigatoria`, padrão `true`). **Desligada no Supabase de testes** (`uacgmmuycbfxeigxgtla`) a pedido do responsável, em 26/11/2026, só com dados fictícios | Facilitar os testes iniciais | **Religar antes de qualquer dado real** (`update public.configuracoes set valor = 'true' where chave = 'auth.mfa_obrigatoria'`) |
 | D15 | Repositório público e GitHub Pages nesta fase (só dados fictícios). **Rever antes de qualquer dado real** (repositório privado / Cloudflare Pages / Netlify) | Prompt 7 | Rever antes de dados reais |
 
 ## Pendências (seção 9 do prompt)

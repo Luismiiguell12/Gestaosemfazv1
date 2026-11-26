@@ -1,6 +1,6 @@
 -- GERADO AUTOMATICAMENTE por scripts/gerar-sql-unico.mjs. Não editar à mão.
 -- Uso: Supabase (web) → SQL Editor → New query → colar TUDO → Run. Somente em projeto NOVO e vazio.
--- Contém 8 migrations, na ordem.
+-- Contém 9 migrations, na ordem.
 
 -- ===================== 20261126000100_base.sql =====================
 -- Fase 1 · base: extensões, schemas, tipos, utilitários
@@ -1172,3 +1172,17 @@ create policy anexos_aprovacao_ler on storage.objects for select to authenticate
   )
 );
 -- sem UPDATE/DELETE: anexos nunca são apagados
+
+-- ===================== 20261126000900_mfa_configuravel.sql =====================
+-- MFA obrigatória vira configuração (padrão: ligada, como no prompt 5).
+-- Desligar só em ambiente de testes, com dados fictícios. Mudança fica na auditoria.
+insert into public.configuracoes (chave, valor, descricao) values
+  ('auth.mfa_obrigatoria', 'true', 'Exigir verificação em duas etapas de administrador e secretária (manter true em produção)')
+on conflict (chave) do nothing;
+
+create or replace function app.exige_mfa(p public.perfil_usuario)
+returns boolean language sql stable security definer set search_path = ''
+as $$
+  select p in ('administrador', 'secretaria')
+     and coalesce((select (c.valor)::boolean from public.configuracoes c where c.chave = 'auth.mfa_obrigatoria'), true)
+$$;

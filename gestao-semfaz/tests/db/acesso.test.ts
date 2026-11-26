@@ -277,3 +277,23 @@ describe('matrícula obrigatória e única', () => {
     });
   });
 });
+
+describe('MFA configurável (auth.mfa_obrigatoria)', () => {
+  it('padrão é ligada', async () => {
+    await cenario(async (c) => {
+      const r = await c.sistema(`select valor from public.configuracoes where chave = 'auth.mfa_obrigatoria'`);
+      expect(r[0].valor).toBe(true);
+    });
+  });
+  it('desligada: secretária sem aal2 acessa; mudança fica na auditoria', async () => {
+    await cenario(async (c) => {
+      await c.sistema(`update public.configuracoes set valor = 'false' where chave = 'auth.mfa_obrigatoria'`);
+      await c.como('sec', 'aal1');
+      expect(await contar(c, 'public.unidades')).toBeGreaterThan(0);
+      const s = (await c.q<{ s: { mfa_exigida: boolean; sessao_ok: boolean } }>('select public.minha_sessao() as s'))[0].s;
+      expect(s).toMatchObject({ mfa_exigida: false, sessao_ok: true });
+      const a = await c.sistema(`select count(*)::int n from public.auditoria where tabela = 'configuracoes' and acao = 'update'`);
+      expect(a[0].n).toBe(1);
+    });
+  });
+});
