@@ -1,0 +1,46 @@
+/* Tema Índigo (prompt 7.1). Componentes usam só estes tokens. */
+:root {
+  --cor-menu: #18215A;
+  --cor-texto-forte: #1A2660;
+  --cor-primaria: #3A57E8;
+  --cor-logo: #8FD3FF;
+  --cor-fundo: #F4F6F9;
+  --cor-positivo: #1E7B4F;
+  --cor-alerta: #C77700;
+  --cor-critico: #B3261E;
+
+  /* neutros e apoio (dos protótipos) */
+  --cor-texto: #1B2433;
+  --cor-texto-2: #3A4557;
+  --cor-texto-suave: #5B6678;
+  --cor-texto-menu: #DCE4F0;
+  --cor-texto-menu-suave: #B9C6D8;
+  --cor-borda: #E1E6EE;
+  --cor-borda-campo: #C9D2DE;
+  --cor-divisor: #EEF1F5;
+  --cor-superficie: #FFFFFF;
+  --cor-superficie-2: #F8FAFC;
+  --cor-coluna: #EAEEF4;
+  --cor-avatar: #DCE4F0;
+  --cor-barra-afazer: #B9C7F4;
+
+  --selo-positivo-bg: #E3F1EA; --selo-positivo-fg: #1E6B45;
+  --selo-alerta-bg: #FDF1DC;   --selo-alerta-fg: #8A4B00;
+  --selo-critico-bg: #FCE8E6;  --selo-critico-fg: #B3261E;
+  --selo-info-bg: #E6EEFB;     --selo-info-fg: #1D4FB0;
+  --selo-neutro-bg: #EEF1F5;   --selo-neutro-fg: #3A4557;
+  --selo-primaria-bg: #E6ECFF;
+
+  --aviso-info-bg: #EEF3FB; --aviso-info-borda: #CFDCF2; --aviso-info-fg: #1D3A66;
+  --aviso-alerta-bg: #FDF1DC; --aviso-alerta-borda: #F0CF95; --aviso-alerta-fg: #6B3A00; --aviso-alerta-icone: #A15C00;
+  --aviso-critico-borda: #F1C2BD;
+  --diff-antes-bg: #FCE8E6; --diff-antes-fg: #8C1D18;
+
+  --raio-sm: 8px;
+  --raio: 10px;
+  --raio-lg: 12px;
+  --raio-xl: 14px;
+  --alvo-toque: 44px;
+  --fonte: 'IBM Plex Sans', system-ui, sans-serif;
+  --foco: 0 0 0 3px rgba(58, 87, 232, 0.45);
+}

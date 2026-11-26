@@ -1,0 +1,15 @@
+import type { NextConfig } from 'next';
+
+// Export estático (GitHub Pages). Sem servidor Node em produção.
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
+const config: NextConfig = {
+  output: 'export',
+  basePath,
+  trailingSlash: true,
+  images: { unoptimized: true },
+  poweredByHeader: false,
+  reactStrictMode: true,
+};
+
+export default config;
