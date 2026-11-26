@@ -34,7 +34,7 @@
     "src/**/*.tsx",
     "tests/**/*.ts",
     ".next/types/**/*.ts",
-    "vitest.config.ts",
+    "vitest.config.mts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
