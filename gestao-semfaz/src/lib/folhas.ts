@@ -8,6 +8,7 @@ export const REGEX_MATRICULA_PADRAO = 'Matr[íi]cula[^0-9A-Za-z]{0,10}([0-9][0-9
 
 export interface PaginaLida { pagina: number; matricula: string | null; nome: string | null }
 
+type ItemTexto = { str?: string; transform?: number[] };
 type PdfJs = {
   getDocument: (o: { data: Uint8Array; isEvalSupported?: boolean; disableFontFace?: boolean; useSystemFonts?: boolean }) => { promise: Promise<PdfDoc> };
 };
@@ -27,14 +28,36 @@ export function extrairNome(texto: string): string | null {
   return m?.[1]?.trim() ?? null;
 }
 
-/** lê o texto de cada página e extrai matrícula/nome; PDF escaneado (sem texto) volta sem matrícula */
+interface Pos { s: string; x: number; y: number }
+/** valor logo ABAIXO do rótulo, na mesma coluna (layout do relatório do RH: rótulo numa linha, valor na seguinte) */
+export function valorAbaixo(itens: Pos[], rotulo: RegExp): string | null {
+  const r = itens.find((i) => rotulo.test(i.s.trim()));
+  if (!r) return null;
+  const c = itens.filter((i) => i !== r && Math.abs(i.x - r.x) <= 15 && r.y - i.y >= 2 && r.y - i.y <= 20).sort((a, b) => (r.y - a.y) - (r.y - b.y));
+  return c[0]?.s.trim() || null;
+}
+
+const MATRICULA_VALIDA = /^[0-9][0-9./-]{0,19}$/;
+
+/** extrai matrícula/nome de uma página: 1º pela posição (abaixo do rótulo); se não achar, pela expressão no texto corrido */
+export function extrairDaPagina(itensBrutos: unknown[], regex?: string): { matricula: string | null; nome: string | null } {
+  const itens: Pos[] = (itensBrutos as ItemTexto[])
+    .filter((i) => (i.str ?? '').trim() && i.transform)
+    .map((i) => ({ s: i.str as string, x: i.transform![4], y: i.transform![5] }));
+  const porPosicao = valorAbaixo(itens, /^Matr[íi]cula$/i);
+  const texto = (itensBrutos as ItemTexto[]).map((i) => i.str ?? '').join(' ').replace(/\s+/g, ' ');
+  const matricula = porPosicao && MATRICULA_VALIDA.test(porPosicao) ? porPosicao : extrairMatricula(texto, regex);
+  const nome = valorAbaixo(itens, /^(Servidor|Nome)$/i) ?? extrairNome(texto);
+  return { matricula, nome: nome ? nome.slice(0, 200) : null };
+}
+
+/** lê cada página e extrai matrícula/nome (nada mais: CPF e demais dados da folha são ignorados) */
 export async function lerPaginas(pdfjs: PdfJs, bytes: Uint8Array, regex?: string, progresso?: (n: number, total: number) => void): Promise<PaginaLida[]> {
   const doc = await pdfjs.getDocument({ data: bytes.slice(), isEvalSupported: false, disableFontFace: true, useSystemFonts: false }).promise;
   const out: PaginaLida[] = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const conteudo = await (await doc.getPage(i)).getTextContent();
-    const texto = conteudo.items.map((it) => (it as { str?: string }).str ?? '').join(' ').replace(/\s+/g, ' ');
-    out.push({ pagina: i, matricula: extrairMatricula(texto, regex), nome: extrairNome(texto) });
+    out.push({ pagina: i, ...extrairDaPagina(conteudo.items, regex) });
     progresso?.(i, doc.numPages);
   }
   await doc.destroy?.();

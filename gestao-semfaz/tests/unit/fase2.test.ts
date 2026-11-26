@@ -3,15 +3,23 @@ import * as PDFLib from 'pdf-lib';
 import { agruparPorUnidade, ehPdf, extrairMatricula, juntarPdfs, lerPaginas, montarPdfUnidade, type PaginaMapeada } from '@/lib/folhas';
 import { COLUNAS_SALDOS, COLUNAS_SERVIDORES, lerCsv, mapearColunas, tipoPlanilha } from '@/lib/planilha';
 
+/** PDF FICTÍCIO que imita o layout do relatório de folha de ponto do RH (Contabilis):
+ *  rótulo "Matrícula"/"Servidor" numa linha e o valor na linha de baixo, CPF e outros campos ao lado. */
 async function pdfDeTeste(paginas: [string, string][]) {
   const doc = await PDFLib.PDFDocument.create();
   const f = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
-  for (const [nome, mat] of paginas) {
+  paginas.forEach(([nome, mat], i) => {
     const p = doc.addPage([595, 842]);
-    p.drawText('PREFEITURA - FOLHA DE PONTO - NOVEMBRO/2026', { x: 40, y: 800, size: 10, font: f });
-    p.drawText(`Nome: ${nome}`, { x: 40, y: 770, size: 10, font: f });
-    p.drawText(`Matrícula: ${mat}`, { x: 340, y: 770, size: 10, font: f });
-  }
+    const t = (s: string, x: number, y: number) => p.drawText(s, { x, y, size: 8, font: f });
+    t('ESTADO DE SERGIPE', 82, 815); t('PREFEITURA MUNICIPAL DE LAGARTO', 82, 800); t('NOVEMBRO/2026', 491, 774);
+    t('Matrícula', 35, 752); t('Servidor', 136, 752);
+    t(mat, 35, 741); t(nome.toUpperCase(), 136, 741);
+    t('CPF', 35, 723); t('Data de Nascimento', 136, 723); t('Admissão', 227, 723); t('Cargo', 318, 723);
+    t('000.000.000-00', 35, 712); t('01/01/1990', 136, 712); t('01/01/2020', 227, 712); t('AUDITOR FISCAL', 318, 712);
+    t('Unidade', 35, 694); t('Função', 318, 694); t('SECRETARIA MUNICIPAL DA FAZENDA- SEMFAZ', 35, 683);
+    t('DIA/MÊS', 36, 613); t('ENTRADA', 108, 606); t('SAÍDA', 161, 606);
+    t(`Página ${i + 1} de ${paginas.length}`, 480, 30);
+  });
   return doc.save();
 }
 
@@ -33,7 +41,7 @@ describe('folhas de ponto: leitura e separação', () => {
     expect(ehPdf(original)).toBe(true);
     const lidas = await lerPaginas(await pdfjsNode() as never, original);
     expect(lidas.map((l) => l.matricula)).toEqual(['000102', '000201', '999999', '000101']);
-    expect(lidas[0].nome).toBe('Servidor E');
+    expect(lidas[0].nome).toBe('SERVIDOR E');
 
     // simula o cruzamento feito no banco
     const banco: Record<string, [string, string, string, number]> = {
@@ -52,7 +60,9 @@ describe('folhas de ponto: leitura e separação', () => {
     const docCofit = await PDFLib.PDFDocument.load(cofit);
     expect(docCofit.getPageCount()).toBe(3); // rosto + 2
     const textoCofit = await lerPaginas(await pdfjsNode() as never, cofit);
-    expect(textoCofit.map((p) => p.matricula)).toEqual([null, '000101', '000102']); // ordem alfabética
+    expect(textoCofit.map((p) => p.matricula)).toEqual([null, '000101', '000102']); // rosto + ordem alfabética
+    // a expressão sozinha não acharia a matrícula neste layout ("Matrícula Servidor 000102 ...")
+    expect(extrairMatricula('Matrícula Servidor 000102 SERVIDOR E')).toBeNull();
     const todos = await juntarPdfs(lib, await Promise.all(grupos.map((g) => montarPdfUnidade(lib, original, g, '11/2026'))));
     expect((await PDFLib.PDFDocument.load(todos)).getPageCount()).toBe(4 + 3); // 4 páginas + 3 rostos; nenhuma descartada
   });

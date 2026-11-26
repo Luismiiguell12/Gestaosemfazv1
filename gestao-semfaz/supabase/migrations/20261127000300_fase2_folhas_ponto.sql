@@ -79,9 +79,16 @@ create policy folhas_entregas_ler on public.folhas_entregas for select to authen
 
 insert into public.configuracoes (chave, valor, descricao) values
   ('folhas.regex_matricula', to_jsonb('Matr[íi]cula[^0-9A-Za-z]{0,10}([0-9][0-9./-]{0,19})'::text),
-   'Expressão que encontra a matrícula em cada página do PDF do RH (PENDENTE: confirmar com o modelo real do RH)'),
+   'Alternativa quando a matrícula não está logo abaixo do rótulo "Matrícula" (formato do relatório do RH, validado em 26/11/2026)'),
   ('folhas.prazo_devolucao_dias_uteis', '5', 'Prazo para a unidade devolver as folhas assinadas (dias úteis)')
 on conflict (chave) do nothing;
+
+create or replace function app.matricula_chave(m text)
+returns text language sql immutable parallel safe set search_path = ''
+as $$ select nullif(coalesce(nullif(ltrim(upper(btrim(coalesce(m, ''))), '0'), ''), case when btrim(coalesce(m, '')) ~ '^0+$' then '0' end), '') $$;
+create index servidores_matricula_chave_idx on public.servidores (app.matricula_chave(matricula));
+-- usada pelo índice: quem insere servidor precisa poder executá-la
+grant execute on function app.matricula_chave(text) to authenticated, service_role;
 
 -- ===== 1) cria o lote com o resultado da leitura do PDF (pagina, matricula, nome) e cruza no banco =====
 create or replace function public.criar_lote_folhas(p_competencia date, p_paginas jsonb)
@@ -96,10 +103,17 @@ begin
   if n < 1 or n > 2000 then perform app.erro('O PDF deve ter de 1 a 2000 páginas.', '22023'); end if;
   insert into public.folhas_lotes (competencia, total_paginas, enviado_por) values (p_competencia, n, auth.uid()) returning id into v_id;
   for r in select * from jsonb_array_elements(p_paginas) loop
+    -- casa a matrícula ignorando maiúsculas e zeros à esquerda ("12345" = "012345");
+    -- se houver mais de um candidato, deixa sem vínculo para conferência manual
     insert into public.folhas_paginas (lote_id, pagina, matricula_lida, nome_lido, servidor_id, unidade_id)
-    select v_id, (r ->> 'pagina')::int, left(nullif(btrim(r ->> 'matricula'), ''), 40), left(nullif(btrim(r ->> 'nome'), ''), 200), s.id, s.unidade_id
+    select v_id, (r ->> 'pagina')::int, left(nullif(btrim(r ->> 'matricula'), ''), 40), left(nullif(btrim(r ->> 'nome'), ''), 200),
+           c.id, c.unidade_id
       from (select 1) x
-      left join public.servidores s on upper(s.matricula) = upper(btrim(r ->> 'matricula'));
+      left join lateral (
+        select s.id, s.unidade_id from public.servidores s
+         where app.matricula_chave(s.matricula) = app.matricula_chave(r ->> 'matricula')
+           and (select count(*) from public.servidores s2 where app.matricula_chave(s2.matricula) = app.matricula_chave(r ->> 'matricula')) = 1
+      ) c on true;
   end loop;
   if (select count(*) from public.folhas_paginas where lote_id = v_id) <> n
      or exists (select 1 from public.folhas_paginas where lote_id = v_id and pagina > n) then

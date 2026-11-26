@@ -86,7 +86,7 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 
 ## Pendências da Fase 2
 
-- **Modelo real do PDF de folhas de ponto do RH**: confirmar onde e como a matrícula aparece e ajustar `folhas.regex_matricula`; testar com um PDF fictício no mesmo formato.
+- ~~Modelo real do PDF de folhas de ponto do RH~~ **Validado em 26/11/2026** com o relatório de novembro/2026 (59 páginas): texto selecionável, 1 página por servidor, matrícula numérica de 4 a 6 dígitos logo abaixo do rótulo "Matrícula" e nome abaixo de "Servidor". A leitura passou a ser por posição: 59/59 matrículas e nomes lidos. O cruzamento ignora zeros à esquerda; se houver ambiguidade, a página vai para conferência. O teste usa um PDF **fictício** no mesmo layout; o arquivo real não foi guardado nem versionado, e as cópias foram apagadas. CPF e demais dados da folha não são lidos.
 - **Regras de saldo**: descontar ou não ao aprovar; férias/licença contam dias corridos ou úteis; folga em dias ou horas.
 - **pg_cron** no Supabase: habilitar a extensão para o aviso diário de atraso das folhas (sem ela o aviso não roda sozinho).
 - **Aplicar a Fase 2 no Supabase de testes e republicar o site** (aguardando autorização).

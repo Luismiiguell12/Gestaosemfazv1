@@ -209,6 +209,18 @@ describe('folhas de ponto', () => {
     });
   });
 
+  it('casa matrícula ignorando zeros à esquerda; ambígua fica para conferência', async () => {
+    await cenario(async (c) => {
+      const cofit = await idUnidade(c, 'COFIT');
+      const cargo = (await c.sistema(`select id from public.cargos limit 1`))[0].id;
+      await c.sistema(`insert into public.servidores (nome_completo, matricula, cargo_id, unidade_id) values ('Dup Um', '0777', $1, $2), ('Dup Dois', '777', $1, $2)`, [cargo, cofit]);
+      await c.como('sec');
+      const lote = (await c.q<{ id: string }>('select public.criar_lote_folhas($1, $2) as id', ['2026-11-01', JSON.stringify([{ pagina: 1, matricula: '101' }, { pagina: 2, matricula: '777' }])]))[0].id;
+      const p = await c.q<{ servidor: string | null }>('select servidor from public.paginas_do_lote($1)', [lote]);
+      expect(p.map((x) => x.servidor)).toEqual(['Servidor A', null]);
+    });
+  });
+
   it('leitura inconsistente do PDF é recusada', async () => {
     await cenario(async (c) => {
       await c.como('sec');
