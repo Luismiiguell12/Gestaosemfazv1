@@ -48,7 +48,7 @@ const servidores = [
 const usuarios = [{ id: 'u1', servidor_id: 's1', perfil: 'coordenador', ativo: true }, { id: 'u2', servidor_id: 's2', perfil: 'funcionario', ativo: true }, { id: 'u3', servidor_id: 's3', perfil: 'funcionario', ativo: true }];
 const M = (codigo, nome, rota, icone, ordem, status) => ({ codigo, nome, rota, icone, ordem, status, no_menu: true });
 const modulos = [
-  M('painel', 'Painel', '/', 'painel', 10, 'ativo'), M('demandas', 'Demandas', '/demandas', 'demandas', 20, 'em_breve'), M('calendario', 'Calendário', '/calendario', 'calendario', 30, 'ativo'),
+  M('painel', 'Painel', '/', 'painel', 10, 'ativo'), M('demandas', 'Demandas', '/demandas', 'demandas', 20, 'ativo'), M('calendario', 'Calendário', '/calendario', 'calendario', 30, 'ativo'),
   M('contratos', 'Contratos de locação', '/contratos', 'contratos', 40, 'em_breve'), M('unidades_consumidoras', 'Unidades consumidoras', '/unidades-consumidoras', 'energia', 50, 'em_breve'),
   M('ferias', 'Férias e folgas', '/ferias', 'ferias', 60, 'ativo'), M('folhas_ponto', 'Folhas de ponto', '/folhas-ponto', 'relogio', 70, 'ativo'),
   M('produtividade', 'Produtividade', '/produtividade', 'grafico', 80, 'em_definicao'), M('aprovacoes', 'Aprovações', '/aprovacoes', 'aprovacoes', 90, 'ativo'),
@@ -78,6 +78,30 @@ async function simularApi(page, perfil, aal) {
       { pagina: 1, matricula_lida: '000101', nome_lido: 'Servidor A', servidor_id: 's2', servidor: 'Servidor A', unidade_id: 'cofit', unidade: 'COFIT', ordem_unidade: 2 },
       { pagina: 2, matricula_lida: '000777', nome_lido: 'Servidor X', servidor_id: null, servidor: null, unidade_id: null, unidade: null, ordem_unidade: null }]);
     if (p.endsWith('/rpc/conflitos_mesmo_cargo')) return json([{ nome: 'Servidor A', inicio: '2026-07-05', fim: '2026-07-24', status: 'aprovado' }]);
+    const hoje = new Date().toISOString().slice(0, 10);
+    const dl = (id, numero, titulo, unidade, status, prioridade, dias, extra = {}) => ({ id, numero, titulo, origem: 'processo', numero_processo: null, unidade_id: unidade.toLowerCase(), unidade, prioridade, status, prazo: hoje, dias_uteis: dias, concluida_em: status === 'concluida' ? '2026-11-24T12:00:00Z' : null,
+      responsaveis: [{ servidor_id: 's2', nome: 'Servidor A', papel: 'titular' }, { servidor_id: 's3', nome: 'Servidor E', papel: 'titular' }], etapas_total: 5, etapas_feitas: 3, criado_por: 'u1', sou_responsavel: true, ...extra });
+    if (p.endsWith('/rpc/listar_demandas')) return json([
+      dl('d1', 101, 'Parecer sobre impugnação de lançamento', 'COFIT', 'a_fazer', 'alta', 3),
+      dl('d2', 102, 'Relatório de fiscalização ISS – lote 3', 'COFIT', 'em_andamento', 'critica', -2),
+      dl('d3', 103, 'Retorno da PGM sobre dívida ativa', 'COFIT', 'aguardando_terceiros', 'media', 6),
+      dl('d4', 104, 'Plano de ações 2027 – fiscalização', 'COFIT', 'em_revisao', 'alta', 15),
+      dl('d5', 105, 'Inventário de processos de ISS', 'COACAM', 'concluida', 'media', 0),
+      dl('d6', 106, 'Atualizar cadastro de imóveis', 'COFIT', 'sugerida', 'baixa', 8, { criado_por: 'u9' })]);
+    if (p.endsWith('/rpc/demanda_detalhe')) return json({
+      demanda: { id: 'd2', numero: 102, titulo: 'Relatório de fiscalização ISS – lote 3', descricao: 'Consolidar as autuações do lote 3.', origem: 'processo', numero_processo: '1234/2026', unidade_id: 'cofit', unidade: 'COFIT', prioridade: 'critica', status: 'em_andamento', prazo: hoje, dias_uteis: -2, concluida_em: null, criado_em: '2026-11-10T12:00:00Z', criado_por_nome: 'Coordenador da COFIT', recorrencia_id: null },
+      permissoes: { gerir: true, responsavel: false, anexar: true, proprio_criador: false },
+      responsaveis: [{ servidor_id: 's2', nome: 'Servidor A', papel: 'titular' }, { servidor_id: 's4', nome: 'Servidor F', papel: 'substituto' }],
+      checklist: [{ id: 'c1', texto: 'Levantar dados', feito: true, responsavel: null, feito_por: 'Servidor A', feito_em: '2026-11-20T12:00:00Z' }, { id: 'c2', texto: 'Redigir', feito: false, responsavel: 'Servidor A', feito_por: null, feito_em: null }],
+      mensagens: [{ id: 'm1', tipo: 'mensagem', texto: 'Lote 3 quase pronto, falta revisar @Servidor E', autor_id: 'u2', autor: 'Servidor A', criado_em: '2026-11-25T13:00:00Z', editado_em: null, feedback: 'ajustar', feedback_comentario: 'Detalhar autuações', feedback_por: 'Coordenador da COFIT', anexo: null },
+        { id: 'm2', tipo: 'pedido_atualizacao', texto: 'Por favor, relate o andamento desta demanda.', autor_id: 'u-sec', autor: 'Secretária Exemplo', criado_em: '2026-11-26T13:00:00Z', editado_em: null, feedback: null, feedback_comentario: null, feedback_por: null, anexo: null }],
+      anexos: [{ id: 'a1', nome: 'parecer.pdf', path: 'demandas/d2/x.pdf', tipo: 'pdf', tamanho: 1000, versao: 2, substitui_id: null, enviado_por: 'Servidor A', enviado_em: '2026-11-24T12:00:00Z' }],
+      historico: [{ em: '2026-11-25T13:00:00Z', ator: 'Coordenador da COFIT', acao: 'feedback', detalhes: { feedback: 'Ajustar', comentario: 'Detalhar autuações' } }, { em: '2026-11-10T12:00:00Z', ator: 'Coordenador da COFIT', acao: 'criada', detalhes: {} }] });
+    if (p.endsWith('/rpc/eventos_calendario')) return json([
+      { tipo: 'compromisso', id: 'e1', titulo: 'Reunião de planejamento', inicio: `${hoje}T12:00:00Z`, fim: `${hoje}T13:30:00Z`, dia_inteiro: false, unidade_id: 'cofit', unidade: 'COFIT', local: 'Sala da DAT', descricao: null, participantes: [{ servidor_id: 's2', nome: 'Servidor A' }], editavel: true },
+      { tipo: 'demanda', id: 'd2', titulo: '#102 Relatório de fiscalização', inicio: `${hoje}T00:00:00Z`, fim: `${hoje}T00:00:00Z`, dia_inteiro: true, unidade_id: 'cofit', unidade: 'COFIT', local: null, descricao: null, participantes: [], editavel: false }]);
+    if (p.endsWith('/rpc/painel_unidades')) return json(unidades.map((u, i) => ({ unidade_id: u.id, a_fazer: 2, em_andamento: 3, concluidas: 4, atrasadas: i % 4 === 1 ? 2 : 0, apertadas: i % 4 === 2 ? 1 : 0, concluidas_90: 10, no_prazo_90: 8 })));
+    if (p.endsWith('/rpc/meus_indicadores')) return json({ abertas: 4, atrasadas: 1, concluidas_mes: 7, no_prazo_pct: 86, por_mes: ['2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11'].map((mes, i) => ({ mes, concluidas: [5, 6, 4, 8, 6, 7][i] })) });
     if (p.endsWith('/rpc/busca_geral')) return json([{ tipo: 'unidade', id: 'cofit', titulo: 'COFIT', subtitulo: 'Coordenadoria de Fiscalização e Tributos', rota: '/usuarios?unidade=cofit' }]);
     const t = p.split('/').pop();
     const ano = new Date().getFullYear();
@@ -90,7 +114,7 @@ async function simularApi(page, perfil, aal) {
     const folhas_arquivos = [
       { id: 'f1', lote_id: 'l1', unidade_id: 'cofit', path: 'lotes/l1/unidades/cofit-1.pdf', paginas: 1, servidores: 1, criado_em: '2026-11-26T13:42:00Z' },
       { id: 'f2', lote_id: 'l1', unidade_id: null, path: 'lotes/l1/unidades/sem-unidade-1.pdf', paginas: 1, servidores: 1, criado_em: '2026-11-26T13:42:00Z' }];
-    const tabelas = { afastamentos, saldos_servidor, folhas_lotes, folhas_arquivos, configuracoes: [], unidades, cargos, servidores, usuarios, modulos, pacotes_padrao: [], usuario_modulos_extras: [], usuario_unidades_extras: [], notificacoes: [], feriados: [{ id: 'f1', data: '2026-12-25', descricao: 'Natal', abrangencia: 'nacional' }], auditoria: [] };
+    const tabelas = { recorrencias: [], afastamentos, saldos_servidor, folhas_lotes, folhas_arquivos, configuracoes: [], unidades, cargos, servidores, usuarios, modulos, pacotes_padrao: [], usuario_modulos_extras: [], usuario_unidades_extras: [], notificacoes: [], feriados: [{ id: 'f1', data: '2026-12-25', descricao: 'Natal', abrangencia: 'nacional' }], auditoria: [] };
     if (t in tabelas) return json(tabelas[t]);
     if (p.includes('/auth/v1/factors') || p.includes('/auth/v1/user')) return json({ id: 'u-sec', factors: [] });
     return json([]);
@@ -153,7 +177,9 @@ await passo('painel da secretária (desktop) segue o protótipo', async () => {
   await page.goto(`${BASE}/`);
   await page.getByRole('heading', { name: 'Como estão as unidades' }).waitFor();
   for (const t of ['Aguardando sua aprovação', 'Contratos perto do vencimento', 'Próximos compromissos', 'Ausências neste mês', 'Ligadas ao Gabinete', 'DAT · Administração Tributária']) await page.getByText(t, { exact: true }).first().waitFor();
-  assert.equal(await page.locator('nav[aria-label="Menu principal"] [aria-disabled="true"]').count(), 5);
+  assert.equal(await page.locator('nav[aria-label="Menu principal"] [aria-disabled="true"]').count(), 4);
+  await page.getByText('Com atraso', { exact: true }).first().waitFor();
+  await page.getByText('Reunião de planejamento').first().waitFor();
   await page.getByText('Folhas de ponto a devolver').waitFor();
   await page.getByText('substituto: Servidor F').waitFor();
   await page.getByText('Nova unidade: Núcleo de IBS').first().waitFor();
@@ -189,7 +215,7 @@ await passo('unidades e usuários: árvore, tabela e perfis', async () => {
 
 await passo('feriados e relatórios (auditoria)', async () => {
   const page = await novaPagina({ perfil: 'secretaria' });
-  await page.goto(`${BASE}/calendario/`);
+  await page.goto(`${BASE}/calendario/feriados/`);
   await page.getByText('Natal').waitFor();
   await page.screenshot({ path: `${SHOTS}/feriados.png`, fullPage: true });
   await page.goto(`${BASE}/relatorios/`);
@@ -228,10 +254,47 @@ await passo('importação de servidores: dialogo com modelo e prévia', async ()
   await page.screenshot({ path: `${SHOTS}/importar-servidores.png` });
 });
 
+await passo('demandas: quadro com 5 colunas, cartões e sugestões', async () => {
+  const page = await novaPagina({ perfil: 'secretaria' });
+  await page.goto(`${BASE}/demandas/`);
+  for (const c of ['A fazer', 'Em andamento', 'Aguardando terceiros', 'Em revisão', 'Concluída']) await page.getByRole('heading', { name: c }).waitFor();
+  await page.getByText('atrasada 2 dias úteis').waitFor();
+  await page.getByText('3 de 5 etapas').first().waitFor();
+  await page.getByText('1 demanda sugerida por funcionários').waitFor();
+  await page.screenshot({ path: `${SHOTS}/demandas.png`, fullPage: true });
+  await page.getByRole('button', { name: 'Lista' }).click();
+  await page.getByRole('cell', { name: '#102' }).waitFor();
+});
+
+await passo('ficha da demanda: checklist, conversa com feedback, anexos e histórico', async () => {
+  const page = await novaPagina({ perfil: 'secretaria' });
+  await page.goto(`${BASE}/demandas/ficha/?id=d2`);
+  await page.getByRole('heading', { name: 'Conversa' }).waitFor();
+  await page.getByText('1 de 2 etapas').waitFor();
+  await page.getByText('Ajustar · Coordenador da COFIT: Detalhar autuações').waitFor();
+  await page.getByText('Servidor F (substituto)').first().waitFor();
+  await page.getByText('v2').waitFor();
+  await page.getByRole('button', { name: 'Pedir atualização' }).waitFor();
+  await page.screenshot({ path: `${SHOTS}/demanda-ficha.png`, fullPage: true });
+});
+
+await passo('calendário: mês, abas e detalhe do compromisso', async () => {
+  const page = await novaPagina({ perfil: 'secretaria' });
+  await page.goto(`${BASE}/calendario/`);
+  await page.getByRole('tab', { name: 'Geral do Gabinete' }).waitFor();
+  await page.getByRole('button', { name: /Reunião de planejamento/ }).first().click();
+  await page.getByText('Sala da DAT').waitFor();
+  await page.screenshot({ path: `${SHOTS}/calendario.png`, fullPage: true });
+  await page.goto(`${BASE}/calendario/feriados/`);
+  await page.getByText('Natal').waitFor();
+});
+
 await passo('painel do funcionário: menu reduzido', async () => {
   const page = await novaPagina({ perfil: 'funcionario', aal: 'aal1' });
   await page.goto(`${BASE}/`);
   await page.getByText('Minhas férias e folgas').waitFor();
+  await page.getByText('86%').waitFor();
+  await page.getByRole('button', { name: '+ Sugerir demanda' }).waitFor();
   assert.equal(await page.locator('nav[aria-label="Menu principal"] .menu-item').count(), 5);
   await page.screenshot({ path: `${SHOTS}/painel-funcionario.png`, fullPage: true });
 });

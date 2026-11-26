@@ -227,6 +227,38 @@ erDiagram
 
 Fluxo das folhas de ponto: navegador lê o texto de cada página (pdf.js) → `criar_lote_folhas` cruza matrícula no banco → navegador monta um PDF por unidade (pdf-lib: folha de rosto + servidores em ordem alfabética) → upload no bucket privado `folhas-ponto` → `registrar_arquivos_folhas`. A chefia só baixa os arquivos das unidades do seu escopo (política do Storage segue `folhas_arquivos`).
 
+### Fase 3 (acréscimos)
+
+```mermaid
+erDiagram
+  unidades ||--o{ demandas : "unidade"
+  demandas ||--o{ demanda_responsaveis : "titular/substituto"
+  demandas ||--o{ demanda_checklist : "etapas"
+  demandas ||--o{ demanda_historico : "só cresce"
+  demandas ||--o{ demanda_mensagens : "conversa"
+  demandas ||--o{ demanda_anexos : "versões"
+  demandas ||--o{ demanda_participantes : "mencionados"
+  recorrencias ||--o{ demandas : "ocorrências (únicas)"
+  afastamentos ||--o| substituicoes : "aplicada/encerrada"
+  compromissos ||--o{ compromisso_participantes : ""
+  demandas { uuid id PK
+    bigint numero UK
+    status_demanda status
+    prioridade_demanda prioridade
+    origem_demanda origem
+    date prazo }
+  recorrencias { uuid id PK
+    periodicidade periodicidade
+    int prazo_dias_uteis
+    date proxima_em }
+  compromissos { uuid id PK
+    uuid unidade_id "null = Geral do Gabinete"
+    timestamptz inicio
+    timestamptz fim }
+```
+
+Rotina diária (pg_cron, 06:05 de Brasília): `app.rotinas_diarias_demandas()` cria as ocorrências recorrentes (sem duplicar), aplica e encerra substituições e avisa prazos próximos. A permissão de cada demanda está em uma função só (`app.pode_ver_demanda`), usada pelas políticas, pelo Storage e pelas RPCs.
+
 `servidores` entra na Fase 1 só com o núcleo (necessário para usuários e para a regra da matrícula). Saldos, importação por planilha e folhas de ponto: Fase 2.
 
 ## 4. Perfis, escopo e módulos

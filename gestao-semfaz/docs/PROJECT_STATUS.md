@@ -4,13 +4,13 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 
 ## Fase atual
 
-**Fase 2 — Servidores, férias, folhas de ponto**: implementada, aguardando validação. A validação da Fase 1 foi adiada pelo responsável (vai testar depois), e a Fase 2 foi iniciada a pedido dele em 26/11/2026.
+**Fase 3 — Demandas, calendário e painéis**: implementada, aguardando validação. A pedido do responsável, as Fases 1 e 2 serão testadas e corrigidas depois (26/11/2026).
 
 | Fase | Situação |
 |---|---|
 | 1. Fundação | Concluída e publicada (testes do responsável pendentes) |
-| 2. Servidores, férias, folhas de ponto | Concluída (aguardando validação) |
-| 3. Demandas, calendário, painéis | Não iniciada |
+| 2. Servidores, férias, folhas de ponto | Concluída e publicada (testes do responsável pendentes) |
+| 3. Demandas, calendário, painéis | Concluída (aguardando validação) |
 | 4. Contratos, UCs, faturas, aluguéis | Não iniciada |
 | 5. Produtividade | Não iniciada (pendente material) |
 | 6. Relatórios e exportações | Não iniciada |
@@ -59,6 +59,16 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 | D26 | Controle de entrega: secretária/admin e chefia da unidade registram envio e devolução; "quem recebeu/devolveu" é servidor da unidade. Aviso de atraso diário (pg_cron, 08:00 de Brasília em dias úteis) | Prompt 6.18 | **Sim** |
 | D27 | Painel ganhou o bloco "Folhas de ponto a devolver" na coluna direita (não está no protótipo; exigido pela 6.18) | Prompt 6.18 | **Sim** (desvio de layout) |
 | D28 | Férias: seletor de ano; pedido pendente **sem** conflito aparece em cartão azul com Recusar/Aprovar (o protótipo só mostra o caso com conflito) | Completar o fluxo | **Sim** (desvio de layout) |
+| D29 | Fase 3 iniciada antes da validação das Fases 1 e 2, a pedido do responsável | Decisão do responsável | Não |
+| D30 | Origem da demanda: além de processo físico, e-mail e WhatsApp (prompt), há "recorrente" (criada pela rotina) e "outra" | Demandas recorrentes e internas | **Sim** |
+| D31 | Status: as 5 colunas do protótipo; "sugerida", "recusada" e "cancelada" ficam fora do quadro. Cancelar é só para a chefia | Protótipo Demandas | **Sim** |
+| D32 | Criar, editar, distribuir e mudar responsáveis da demanda é feito direto pela chefia (diretor/coordenador no escopo, secretária, admin), com histórico. Não passa pela central de aprovações (não é dado cadastral) | Prompt 6.2 | **Sim** |
+| D33 | Quem vê a demanda: responsáveis, chefia do escopo, secretária/admin, quem sugeriu e quem foi mencionado (passa a ver a ficha e a conversa) | Prompt 6.2 e 6.21 | **Sim** |
+| D34 | Anexos: responsáveis e chefia; até 20 MB; tipo real conferido (DOCX/XLSX = ZIP + extensão); nova versão nunca apaga a anterior | Prompt 6.20 | Não |
+| D35 | Substituto nas demandas: rotina diária às 06:05 (Brasília), a partir do 1º dia útil do afastamento; no retorno o substituto sai das demandas não concluídas (continua registrado nas concluídas) | Prompt 6.14 | Não |
+| D36 | Aviso de prazo: no dia útil anterior e no dia do prazo, uma vez por dia. "Prazo apertado" no painel = prazo em até 2 dias úteis (configurável) | Prompt 6.10 e protótipo | **Sim** |
+| D37 | Calendário: o compromisso pode ter participantes de qualquer unidade; o funcionário vê só onde é participante ou responsável. O calendário "Geral do Gabinete" é da secretária/admin. Feriados ficaram em Calendário › Feriados (resolve a D7) | Prompt 6.3 | **Sim** |
+| D38 | Painel: "% no prazo" considera as demandas concluídas nos últimos 90 dias; a barra mostra a fazer, em andamento (inclui aguardando e revisão) e concluídas nos últimos 30 dias | Protótipo Main | **Sim** |
 | D15 | Repositório público e GitHub Pages nesta fase (só dados fictícios). **Rever antes de qualquer dado real** (repositório privado / Cloudflare Pages / Netlify) | Prompt 7 | Rever antes de dados reais |
 
 ## Pendências (seção 9 do prompt)
@@ -83,6 +93,12 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 | Dependências | `npm audit --omit=dev` | 0 vulnerabilidades |
 
 **Não executados:** Supabase real (Auth, hook de token, Storage, Edge Function `convidar-usuario`, e-mails de convite e recuperação, MFA real) e CI do GitHub Actions.
+
+## Pendências da Fase 3
+
+- **Notificações por e-mail e no celular (push)** (6.10): as notificações internas funcionam. E-mail depende de SMTP próprio no Supabase; push depende de chaves VAPID e de uma Edge Function. Fica para quando o SMTP estiver configurado.
+- **Aplicar a Fase 3 no Supabase de testes e republicar o site** (aguardando autorização).
+- Arrastar cartões no quadro funciona com mouse e toque; pelo teclado, o status muda na ficha da demanda.
 
 ## Pendências da Fase 2
 

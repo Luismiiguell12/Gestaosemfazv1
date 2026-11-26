@@ -1,6 +1,6 @@
 -- GERADO AUTOMATICAMENTE por scripts/gerar-sql-unico.mjs. Não editar à mão.
 -- Uso: Supabase (web) → SQL Editor → New query → colar TUDO → Run. Somente em projeto NOVO e vazio.
--- Contém 13 migrations, na ordem.
+-- Contém 16 migrations, na ordem.
 
 -- ===================== 20261126000100_base.sql =====================
 -- Fase 1 · base: extensões, schemas, tipos, utilitários
@@ -1956,3 +1956,1028 @@ as $$
   left join public.cargos c on c.id = s.cargo_id
   left join public.unidades un on un.id = s.unidade_id
 $$;
+
+-- ===================== 20261128000100_fase3_demandas.sql =====================
+-- Fase 3 · demandas (6.2), checklist (6.16), histórico. Prazos em dias úteis.
+
+create type public.status_demanda as enum ('sugerida', 'a_fazer', 'em_andamento', 'aguardando_terceiros', 'em_revisao', 'concluida', 'recusada', 'cancelada');
+create type public.prioridade_demanda as enum ('baixa', 'media', 'alta', 'critica');
+create type public.origem_demanda as enum ('processo', 'email', 'whatsapp', 'recorrente', 'outra');
+
+create table public.demandas (
+  id uuid primary key default gen_random_uuid(),
+  numero bigint generated always as identity unique,
+  titulo text not null check (length(btrim(titulo)) between 3 and 200),
+  descricao text check (descricao is null or length(descricao) <= 5000),
+  origem public.origem_demanda not null default 'outra',
+  numero_processo text check (numero_processo is null or length(numero_processo) <= 60),
+  unidade_id uuid not null references public.unidades (id),
+  prioridade public.prioridade_demanda not null default 'media',
+  status public.status_demanda not null default 'a_fazer',
+  prazo date,
+  recorrencia_id uuid,
+  ocorrencia_ref text,
+  criado_por uuid not null references public.usuarios (id),
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  iniciada_em timestamptz,
+  concluida_em timestamptz,
+  ultimo_aviso_prazo date,
+  constraint demandas_ocorrencia_unica unique (recorrencia_id, ocorrencia_ref)
+);
+create index demandas_unidade_idx on public.demandas (unidade_id, status);
+create index demandas_prazo_idx on public.demandas (prazo) where status not in ('concluida', 'recusada', 'cancelada');
+create index demandas_busca_idx on public.demandas (app.normalizar(titulo));
+create trigger demandas_atualizado before update on public.demandas for each row execute function app.tocar_atualizado_em();
+
+create type public.papel_responsavel as enum ('titular', 'substituto');
+create table public.demanda_responsaveis (
+  demanda_id uuid not null references public.demandas (id) on delete cascade,
+  servidor_id uuid not null references public.servidores (id),
+  papel public.papel_responsavel not null default 'titular',
+  ativo boolean not null default true,
+  afastamento_id uuid references public.afastamentos (id),
+  adicionado_em timestamptz not null default now(),
+  removido_em timestamptz,
+  primary key (demanda_id, servidor_id)
+);
+create index demanda_resp_servidor_idx on public.demanda_responsaveis (servidor_id) where ativo;
+
+create table public.demanda_checklist (
+  id uuid primary key default gen_random_uuid(),
+  demanda_id uuid not null references public.demandas (id) on delete cascade,
+  texto text not null check (length(btrim(texto)) between 1 and 300),
+  responsavel_id uuid references public.servidores (id),
+  ordem integer not null default 0,
+  feito boolean not null default false,
+  feito_por uuid references public.usuarios (id),
+  feito_em timestamptz,
+  removido boolean not null default false
+);
+create index demanda_checklist_idx on public.demanda_checklist (demanda_id, ordem);
+
+-- histórico da demanda: só cresce
+create table public.demanda_historico (
+  id bigint generated always as identity primary key,
+  demanda_id uuid not null references public.demandas (id) on delete cascade,
+  em timestamptz not null default now(),
+  ator_id uuid references public.usuarios (id),
+  acao text not null,
+  detalhes jsonb not null default '{}'::jsonb
+);
+create index demanda_historico_idx on public.demanda_historico (demanda_id, em);
+create trigger demanda_historico_imutavel before update or delete on public.demanda_historico
+  for each row execute function app.auditoria_imutavel();
+
+-- quem foi mencionado passa a ver a conversa (e a ficha) daquela demanda
+create table public.demanda_participantes (
+  demanda_id uuid not null references public.demandas (id) on delete cascade,
+  usuario_id uuid not null references public.usuarios (id),
+  incluido_em timestamptz not null default now(),
+  primary key (demanda_id, usuario_id)
+);
+
+do $$
+declare t text;
+begin
+  foreach t in array array['demandas', 'demanda_responsaveis', 'demanda_checklist', 'demanda_historico', 'demanda_participantes'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from anon, authenticated', t);
+    execute format('grant select on public.%I to authenticated', t);
+  end loop;
+  foreach t in array array['demandas', 'demanda_responsaveis', 'demanda_checklist'] loop
+    execute format('create trigger %I after insert or update or delete on public.%I for each row execute function app.auditar_linha()', t || '_auditoria', t);
+  end loop;
+end $$;
+
+-- ===== regras de acesso (uma função, usada nas políticas e nas RPCs) =====
+create or replace function app.eh_responsavel(p_demanda uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $$ select exists (select 1 from public.demanda_responsaveis r where r.demanda_id = p_demanda and r.ativo and r.servidor_id = app.servidor_atual()) $$;
+
+create or replace function app.pode_gerir_demanda(p_unidade uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $$
+  select app.gestor_geral()
+      or (app.sessao_ok() and app.perfil_atual() in ('diretor', 'coordenador') and app.tem_modulo('demandas') and app.na_escopo(p_unidade))
+$$;
+
+create or replace function app.pode_ver_demanda(p_demanda uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $$
+  select app.sessao_ok() and exists (
+    select 1 from public.demandas d where d.id = p_demanda and (
+      app.pode_gerir_demanda(d.unidade_id)
+      or app.eh_responsavel(d.id)
+      or d.criado_por = auth.uid()
+      or exists (select 1 from public.demanda_participantes p where p.demanda_id = d.id and p.usuario_id = auth.uid())
+    ))
+$$;
+
+create policy demandas_ler on public.demandas for select to authenticated using ((select app.pode_ver_demanda(id)));
+create policy demanda_resp_ler on public.demanda_responsaveis for select to authenticated using ((select app.pode_ver_demanda(demanda_id)));
+create policy demanda_check_ler on public.demanda_checklist for select to authenticated using ((select app.pode_ver_demanda(demanda_id)));
+create policy demanda_hist_ler on public.demanda_historico for select to authenticated using ((select app.pode_ver_demanda(demanda_id)));
+create policy demanda_part_ler on public.demanda_participantes for select to authenticated using ((select app.pode_ver_demanda(demanda_id)));
+grant execute on function app.pode_ver_demanda(uuid), app.pode_gerir_demanda(uuid), app.eh_responsavel(uuid) to authenticated;
+
+create or replace function app.historico(p_demanda uuid, p_acao text, p_detalhes jsonb default '{}'::jsonb)
+returns void language sql security definer set search_path = ''
+as $$ insert into public.demanda_historico (demanda_id, ator_id, acao, detalhes) values (p_demanda, auth.uid(), p_acao, coalesce(p_detalhes, '{}'::jsonb)) $$;
+
+create or replace function app.usuario_do_servidor(p_servidor uuid)
+returns uuid language sql stable security definer set search_path = ''
+as $$ select u.id from public.usuarios u where u.servidor_id = p_servidor and u.ativo $$;
+
+create or replace function app.titulo_demanda(p_demanda uuid)
+returns text language sql stable security definer set search_path = ''
+as $$ select '#' || numero || ' ' || titulo from public.demandas where id = p_demanda $$;
+
+-- define os responsáveis titulares (diferença: entra/sai), notifica quem entrou
+create or replace function app.definir_titulares(p_demanda uuid, p_servidores uuid[])
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare v_s uuid; v_unidade uuid; v_u uuid;
+begin
+  select unidade_id into v_unidade from public.demandas where id = p_demanda;
+  foreach v_s in array coalesce(p_servidores, '{}'::uuid[]) loop
+    if not exists (select 1 from public.servidores s where s.id = v_s and s.situacao = 'ativo') then
+      perform app.erro('Responsável inexistente ou inativo.', '22023');
+    end if;
+    -- rotina agendada (sem usuário) já validou no modelo; usuário: só servidores do seu escopo
+    if auth.uid() is not null and not app.gestor_geral() and not app.na_escopo((select unidade_id from public.servidores where id = v_s)) then
+      perform app.erro('Responsável fora da sua unidade.', '42501');
+    end if;
+  end loop;
+  -- sai quem não está na lista
+  update public.demanda_responsaveis set ativo = false, removido_em = now()
+   where demanda_id = p_demanda and papel = 'titular' and ativo and not (servidor_id = any (coalesce(p_servidores, '{}'::uuid[])));
+  foreach v_s in array coalesce(p_servidores, '{}'::uuid[]) loop
+    insert into public.demanda_responsaveis as r (demanda_id, servidor_id, papel, ativo)
+    values (p_demanda, v_s, 'titular', true)
+    on conflict (demanda_id, servidor_id) do update set papel = 'titular', ativo = true, removido_em = null, afastamento_id = null
+      where not (r.ativo and r.papel = 'titular');
+    if found then
+      perform app.historico(p_demanda, 'responsavel_incluido', jsonb_build_object('servidor', (select nome_completo from public.servidores where id = v_s)));
+      v_u := app.usuario_do_servidor(v_s);
+      if v_u is not null and v_u is distinct from auth.uid() then
+        perform app.notificar(v_u, 'demanda_inclusao', 'Você foi incluído em uma demanda', app.titulo_demanda(p_demanda), '/demandas/ficha?id=' || p_demanda);
+      end if;
+    end if;
+  end loop;
+end $$;
+
+create or replace function app.validar_dados_demanda(d jsonb)
+returns void language plpgsql immutable set search_path = ''
+as $$
+begin
+  if d ? 'titulo' and length(btrim(coalesce(d ->> 'titulo', ''))) < 3 then perform app.erro('Título com pelo menos 3 caracteres.', '22023'); end if;
+  if d ? 'origem' and (d ->> 'origem') not in ('processo', 'email', 'whatsapp', 'recorrente', 'outra') then perform app.erro('Origem inválida.', '22023'); end if;
+  if d ? 'prioridade' and (d ->> 'prioridade') not in ('baixa', 'media', 'alta', 'critica') then perform app.erro('Prioridade inválida.', '22023'); end if;
+end $$;
+
+-- ===== criar (chefia) =====
+create or replace function public.criar_demanda(p_dados jsonb, p_responsaveis uuid[], p_checklist text[] default '{}')
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid; v_unidade uuid := (p_dados ->> 'unidade_id')::uuid; v_item text; i integer := 0;
+begin
+  if not app.pode_gerir_demanda(v_unidade) then perform app.erro('Somente a chefia da unidade cria demandas.', '42501'); end if;
+  perform app.validar_dados_demanda(p_dados);
+  insert into public.demandas (titulo, descricao, origem, numero_processo, unidade_id, prioridade, prazo, criado_por)
+  values (btrim(p_dados ->> 'titulo'), nullif(btrim(coalesce(p_dados ->> 'descricao', '')), ''), coalesce((p_dados ->> 'origem')::public.origem_demanda, 'outra'),
+          nullif(btrim(coalesce(p_dados ->> 'numero_processo', '')), ''), v_unidade, coalesce((p_dados ->> 'prioridade')::public.prioridade_demanda, 'media'),
+          (p_dados ->> 'prazo')::date, auth.uid())
+  returning id into v_id;
+  perform app.historico(v_id, 'criada', jsonb_build_object('prazo', p_dados ->> 'prazo'));
+  perform app.definir_titulares(v_id, p_responsaveis);
+  foreach v_item in array coalesce(p_checklist, '{}'::text[]) loop
+    if btrim(v_item) <> '' then
+      insert into public.demanda_checklist (demanda_id, texto, ordem) values (v_id, left(btrim(v_item), 300), i);
+      i := i + 1;
+    end if;
+  end loop;
+  return v_id;
+exception when invalid_text_representation or invalid_datetime_format or datetime_field_overflow then
+  perform app.erro('Dados inválidos.', '22023');
+end $$;
+
+-- ===== sugerir (funcionário) e decidir sugestão (chefia) =====
+create or replace function public.sugerir_demanda(p_dados jsonb)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid; v_unidade uuid := app.unidade_atual(); v_chefe uuid;
+begin
+  if not app.sessao_ok() or not app.tem_modulo('demandas') then perform app.erro('Acesso não permitido.', '42501'); end if;
+  perform app.validar_dados_demanda(p_dados);
+  insert into public.demandas (titulo, descricao, origem, numero_processo, unidade_id, prioridade, prazo, status, criado_por)
+  values (btrim(p_dados ->> 'titulo'), nullif(btrim(coalesce(p_dados ->> 'descricao', '')), ''), coalesce((p_dados ->> 'origem')::public.origem_demanda, 'outra'),
+          nullif(btrim(coalesce(p_dados ->> 'numero_processo', '')), ''), v_unidade, coalesce((p_dados ->> 'prioridade')::public.prioridade_demanda, 'media'),
+          (p_dados ->> 'prazo')::date, 'sugerida', auth.uid())
+  returning id into v_id;
+  perform app.historico(v_id, 'sugerida');
+  for v_chefe in select app.chefes_da_unidade(v_unidade) loop
+    perform app.notificar(v_chefe, 'demanda_sugestao', 'Sugestão de demanda', app.titulo_demanda(v_id), '/demandas/ficha?id=' || v_id);
+  end loop;
+  return v_id;
+exception when invalid_text_representation or invalid_datetime_format or datetime_field_overflow then
+  perform app.erro('Dados inválidos.', '22023');
+end $$;
+
+create or replace function public.decidir_sugestao(p_id uuid, p_aprovar boolean, p_responsaveis uuid[] default '{}', p_prazo date default null, p_comentario text default null)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare d public.demandas;
+begin
+  select * into d from public.demandas where id = p_id for update;
+  if not found or d.status <> 'sugerida' then perform app.erro('Sugestão não encontrada ou já decidida.', 'P0002'); end if;
+  if not app.pode_gerir_demanda(d.unidade_id) then perform app.erro('Somente a chefia da unidade decide sugestões.', '42501'); end if;
+  if d.criado_por = auth.uid() then perform app.erro('Ninguém aprova a própria sugestão.', '42501'); end if;
+  if p_aprovar then
+    if coalesce(array_length(p_responsaveis, 1), 0) = 0 then perform app.erro('Indique pelo menos um responsável.', '22023'); end if;
+    update public.demandas set status = 'a_fazer', prazo = coalesce(p_prazo, prazo) where id = p_id;
+    perform app.historico(p_id, 'sugestao_aprovada', jsonb_build_object('comentario', p_comentario));
+    perform app.definir_titulares(p_id, p_responsaveis);
+  else
+    if length(btrim(coalesce(p_comentario, ''))) = 0 then perform app.erro('Informe o comentário para recusar.', '22023'); end if;
+    update public.demandas set status = 'recusada' where id = p_id;
+    perform app.historico(p_id, 'sugestao_recusada', jsonb_build_object('comentario', p_comentario));
+  end if;
+  perform app.notificar(d.criado_por, 'demanda_sugestao_resultado', case when p_aprovar then 'Sugestão aprovada' else 'Sugestão recusada' end,
+    app.titulo_demanda(p_id), '/demandas/ficha?id=' || p_id);
+end $$;
+
+-- ===== editar dados (chefia) =====
+create or replace function public.atualizar_demanda(p_id uuid, p_dados jsonb)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare d public.demandas; v_antes jsonb; v_depois jsonb; k text;
+begin
+  select * into d from public.demandas where id = p_id for update;
+  if not found then perform app.erro('Demanda não encontrada.', 'P0002'); end if;
+  if not app.pode_gerir_demanda(d.unidade_id) then perform app.erro('Somente a chefia da unidade edita a demanda.', '42501'); end if;
+  if exists (select 1 from jsonb_object_keys(p_dados) x where x not in ('titulo', 'descricao', 'origem', 'numero_processo', 'prioridade', 'prazo')) then
+    perform app.erro('Campo não permitido.', '22023');
+  end if;
+  perform app.validar_dados_demanda(p_dados);
+  v_antes := (select jsonb_object_agg(k2, to_jsonb(d) -> k2) from jsonb_object_keys(p_dados) k2);
+  update public.demandas set
+    titulo = case when p_dados ? 'titulo' then btrim(p_dados ->> 'titulo') else titulo end,
+    descricao = case when p_dados ? 'descricao' then nullif(btrim(coalesce(p_dados ->> 'descricao', '')), '') else descricao end,
+    origem = case when p_dados ? 'origem' then (p_dados ->> 'origem')::public.origem_demanda else origem end,
+    numero_processo = case when p_dados ? 'numero_processo' then nullif(btrim(coalesce(p_dados ->> 'numero_processo', '')), '') else numero_processo end,
+    prioridade = case when p_dados ? 'prioridade' then (p_dados ->> 'prioridade')::public.prioridade_demanda else prioridade end,
+    prazo = case when p_dados ? 'prazo' then (p_dados ->> 'prazo')::date else prazo end
+   where id = p_id returning to_jsonb(demandas.*) into v_depois;
+  perform app.historico(p_id, 'editada', jsonb_build_object('antes', v_antes,
+    'depois', (select jsonb_object_agg(k2, v_depois -> k2) from jsonb_object_keys(p_dados) k2)));
+exception when invalid_text_representation or invalid_datetime_format or datetime_field_overflow then
+  perform app.erro('Dados inválidos.', '22023');
+end $$;
+
+create or replace function public.definir_responsaveis(p_id uuid, p_servidores uuid[])
+returns void language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not app.pode_gerir_demanda((select unidade_id from public.demandas where id = p_id)) then
+    perform app.erro('Somente a chefia da unidade distribui a demanda.', '42501');
+  end if;
+  if coalesce(array_length(p_servidores, 1), 0) = 0 then perform app.erro('Indique pelo menos um responsável.', '22023'); end if;
+  perform app.definir_titulares(p_id, p_servidores);
+end $$;
+
+-- ===== status (responsável ou chefia). Concluir é ação explícita, nunca automática =====
+create or replace function public.mudar_status_demanda(p_id uuid, p_status public.status_demanda)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare d public.demandas;
+begin
+  select * into d from public.demandas where id = p_id for update;
+  if not found then perform app.erro('Demanda não encontrada.', 'P0002'); end if;
+  if not (app.eh_responsavel(p_id) or app.pode_gerir_demanda(d.unidade_id)) then
+    perform app.erro('Somente responsáveis ou a chefia mudam o status.', '42501');
+  end if;
+  if d.status in ('sugerida', 'recusada') or p_status in ('sugerida', 'recusada') then perform app.erro('Use a decisão de sugestão.', '22023'); end if;
+  if p_status = 'cancelada' and not app.pode_gerir_demanda(d.unidade_id) then perform app.erro('Somente a chefia cancela.', '42501'); end if;
+  if d.status = p_status then return; end if;
+  update public.demandas set status = p_status,
+    iniciada_em = case when p_status = 'em_andamento' and iniciada_em is null then now() else iniciada_em end,
+    concluida_em = case when p_status = 'concluida' then now() else null end
+   where id = p_id;
+  perform app.historico(p_id, 'status', jsonb_build_object('de', d.status, 'para', p_status));
+end $$;
+
+-- ===== checklist =====
+create or replace function public.adicionar_item_checklist(p_demanda uuid, p_texto text, p_responsavel uuid default null)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid;
+begin
+  if not (app.eh_responsavel(p_demanda) or app.pode_gerir_demanda((select unidade_id from public.demandas where id = p_demanda))) then
+    perform app.erro('Somente responsáveis ou a chefia editam o checklist.', '42501');
+  end if;
+  insert into public.demanda_checklist (demanda_id, texto, responsavel_id, ordem)
+  values (p_demanda, left(btrim(p_texto), 300), p_responsavel, coalesce((select max(ordem) + 1 from public.demanda_checklist where demanda_id = p_demanda), 0))
+  returning id into v_id;
+  perform app.historico(p_demanda, 'etapa_incluida', jsonb_build_object('etapa', left(btrim(p_texto), 300)));
+  return v_id;
+end $$;
+
+create or replace function public.marcar_item_checklist(p_item uuid, p_feito boolean)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare c public.demanda_checklist;
+begin
+  select * into c from public.demanda_checklist where id = p_item and not removido;
+  if not found then perform app.erro('Etapa não encontrada.', 'P0002'); end if;
+  if not (app.eh_responsavel(c.demanda_id) or app.pode_gerir_demanda((select unidade_id from public.demandas where id = c.demanda_id))) then
+    perform app.erro('Somente responsáveis ou a chefia marcam etapas.', '42501');
+  end if;
+  if c.feito = p_feito then return; end if;
+  update public.demanda_checklist set feito = p_feito, feito_por = case when p_feito then auth.uid() end, feito_em = case when p_feito then now() end where id = p_item;
+  perform app.historico(c.demanda_id, case when p_feito then 'etapa_marcada' else 'etapa_desmarcada' end, jsonb_build_object('etapa', c.texto));
+end $$;
+
+create or replace function public.remover_item_checklist(p_item uuid)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare c public.demanda_checklist;
+begin
+  select * into c from public.demanda_checklist where id = p_item and not removido;
+  if not found then perform app.erro('Etapa não encontrada.', 'P0002'); end if;
+  if not app.pode_gerir_demanda((select unidade_id from public.demandas where id = c.demanda_id)) then perform app.erro('Somente a chefia remove etapas.', '42501'); end if;
+  update public.demanda_checklist set removido = true where id = p_item;
+  perform app.historico(c.demanda_id, 'etapa_removida', jsonb_build_object('etapa', c.texto));
+end $$;
+
+-- ===== listagem para quadro/lista (com nomes dos responsáveis e andamento do checklist) =====
+create or replace function public.listar_demandas(p_incluir_encerradas_dias integer default 60)
+returns table (id uuid, numero bigint, titulo text, origem public.origem_demanda, numero_processo text, unidade_id uuid, unidade text,
+               prioridade public.prioridade_demanda, status public.status_demanda, prazo date, dias_uteis integer, concluida_em timestamptz,
+               responsaveis jsonb, etapas_total integer, etapas_feitas integer, criado_por uuid, sou_responsavel boolean)
+language sql stable security definer set search_path = ''
+as $$
+  select d.id, d.numero, d.titulo, d.origem, d.numero_processo, d.unidade_id, u.sigla, d.prioridade, d.status, d.prazo,
+         case when d.prazo is null then null else public.dias_uteis_entre(current_date, d.prazo) end,
+         d.concluida_em,
+         coalesce((select jsonb_agg(jsonb_build_object('servidor_id', s.id, 'nome', s.nome_completo, 'papel', r.papel) order by r.papel, s.nome_completo)
+                     from public.demanda_responsaveis r join public.servidores s on s.id = r.servidor_id where r.demanda_id = d.id and r.ativo), '[]'::jsonb),
+         (select count(*)::int from public.demanda_checklist c where c.demanda_id = d.id and not c.removido),
+         (select count(*)::int from public.demanda_checklist c where c.demanda_id = d.id and not c.removido and c.feito),
+         d.criado_por, app.eh_responsavel(d.id)
+    from public.demandas d join public.unidades u on u.id = d.unidade_id
+   where app.pode_ver_demanda(d.id)
+     and (d.status not in ('concluida', 'recusada', 'cancelada') or coalesce(d.concluida_em, d.atualizado_em) > now() - make_interval(days => greatest(p_incluir_encerradas_dias, 0)))
+   order by d.prazo nulls last, d.numero
+$$;
+
+grant execute on function public.criar_demanda(jsonb, uuid[], text[]) to authenticated;
+grant execute on function public.sugerir_demanda(jsonb) to authenticated;
+grant execute on function public.decidir_sugestao(uuid, boolean, uuid[], date, text) to authenticated;
+grant execute on function public.atualizar_demanda(uuid, jsonb) to authenticated;
+grant execute on function public.definir_responsaveis(uuid, uuid[]) to authenticated;
+grant execute on function public.mudar_status_demanda(uuid, public.status_demanda) to authenticated;
+grant execute on function public.adicionar_item_checklist(uuid, text, uuid) to authenticated;
+grant execute on function public.marcar_item_checklist(uuid, boolean) to authenticated;
+grant execute on function public.remover_item_checklist(uuid) to authenticated;
+grant execute on function public.listar_demandas(integer) to authenticated;
+
+-- ===================== 20261128000200_fase3_conversa_anexos.sql =====================
+-- Fase 3 · conversa da demanda (6.21) e anexos (6.20)
+
+create type public.feedback_mensagem as enum ('aprovado', 'ajustar', 'refazer');
+create type public.tipo_mensagem as enum ('mensagem', 'pedido_atualizacao');
+
+create table public.demanda_anexos (
+  id uuid primary key default gen_random_uuid(),
+  demanda_id uuid not null references public.demandas (id) on delete cascade,
+  nome text not null check (length(nome) between 1 and 120),
+  path text not null unique,
+  tipo text not null check (tipo in ('pdf', 'png', 'jpg', 'docx', 'xlsx')),
+  tamanho integer not null check (tamanho between 1 and 20971520),
+  versao integer not null default 1,
+  substitui_id uuid references public.demanda_anexos (id),
+  enviado_por uuid not null references public.usuarios (id),
+  enviado_em timestamptz not null default now()
+);
+create index demanda_anexos_idx on public.demanda_anexos (demanda_id, enviado_em);
+
+create table public.demanda_mensagens (
+  id uuid primary key default gen_random_uuid(),
+  demanda_id uuid not null references public.demandas (id) on delete cascade,
+  autor_id uuid not null references public.usuarios (id),
+  tipo public.tipo_mensagem not null default 'mensagem',
+  texto text not null check (length(btrim(texto)) between 1 and 4000),
+  anexo_id uuid references public.demanda_anexos (id),
+  criado_em timestamptz not null default now(),
+  editado_em timestamptz,
+  feedback public.feedback_mensagem,
+  feedback_comentario text check (feedback_comentario is null or length(feedback_comentario) <= 1000),
+  feedback_por uuid references public.usuarios (id),
+  feedback_em timestamptz
+);
+create index demanda_mensagens_idx on public.demanda_mensagens (demanda_id, criado_em);
+
+do $$
+declare t text;
+begin
+  foreach t in array array['demanda_anexos', 'demanda_mensagens'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from anon, authenticated', t);
+    execute format('grant select on public.%I to authenticated', t);
+    execute format('create trigger %I after insert or update or delete on public.%I for each row execute function app.auditar_linha()', t || '_auditoria', t);
+  end loop;
+end $$;
+create policy demanda_anexos_ler on public.demanda_anexos for select to authenticated using ((select app.pode_ver_demanda(demanda_id)));
+create policy demanda_msg_ler on public.demanda_mensagens for select to authenticated using ((select app.pode_ver_demanda(demanda_id)));
+-- mensagens e anexos nunca são apagados
+create trigger demanda_mensagens_sem_delete before delete on public.demanda_mensagens for each row execute function app.auditoria_imutavel();
+create trigger demanda_anexos_sem_delete before delete on public.demanda_anexos for each row execute function app.auditoria_imutavel();
+
+-- ===== mensagens =====
+create or replace function public.enviar_mensagem(p_demanda uuid, p_texto text, p_mencoes uuid[] default '{}', p_anexo uuid default null)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid; v_u uuid; v_autor text := app.nome_usuario(auth.uid());
+begin
+  if not app.pode_ver_demanda(p_demanda) then perform app.erro('Você não participa desta demanda.', '42501'); end if;
+  if length(btrim(coalesce(p_texto, ''))) = 0 then perform app.erro('Mensagem vazia.', '22023'); end if;
+  if p_anexo is not null and not exists (select 1 from public.demanda_anexos where id = p_anexo and demanda_id = p_demanda) then
+    perform app.erro('Anexo inválido.', '22023');
+  end if;
+  insert into public.demanda_mensagens (demanda_id, autor_id, texto, anexo_id) values (p_demanda, auth.uid(), left(btrim(p_texto), 4000), p_anexo) returning id into v_id;
+  foreach v_u in array coalesce(p_mencoes, '{}'::uuid[]) loop
+    continue when v_u = auth.uid();
+    if not exists (select 1 from public.usuarios u join public.servidores s on s.id = u.servidor_id where u.id = v_u and u.ativo and s.situacao = 'ativo') then
+      continue;
+    end if;
+    insert into public.demanda_participantes (demanda_id, usuario_id) values (p_demanda, v_u) on conflict do nothing;
+    perform app.notificar(v_u, 'demanda_mencao', v_autor || ' mencionou você', app.titulo_demanda(p_demanda), '/demandas/ficha?id=' || p_demanda);
+    perform app.historico(p_demanda, 'mencao', jsonb_build_object('usuario', app.nome_usuario(v_u)));
+  end loop;
+  return v_id;
+end $$;
+
+create or replace function public.editar_mensagem(p_id uuid, p_texto text)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare m public.demanda_mensagens;
+begin
+  select * into m from public.demanda_mensagens where id = p_id;
+  if not found or m.autor_id <> auth.uid() or not app.pode_ver_demanda(m.demanda_id) then perform app.erro('Só o autor edita a mensagem.', '42501'); end if;
+  if length(btrim(coalesce(p_texto, ''))) = 0 then perform app.erro('Mensagem vazia.', '22023'); end if;
+  update public.demanda_mensagens set texto = left(btrim(p_texto), 4000), editado_em = now() where id = p_id;  -- texto anterior fica na auditoria
+end $$;
+
+-- "Pedir atualização": secretária, diretor ou coordenador
+create or replace function public.pedir_atualizacao(p_demanda uuid, p_texto text default null)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid; v_s uuid; v_u uuid;
+begin
+  if not app.pode_gerir_demanda((select unidade_id from public.demandas where id = p_demanda)) then
+    perform app.erro('Somente a chefia ou a Secretária pedem atualização.', '42501');
+  end if;
+  insert into public.demanda_mensagens (demanda_id, autor_id, tipo, texto)
+  values (p_demanda, auth.uid(), 'pedido_atualizacao', coalesce(nullif(btrim(coalesce(p_texto, '')), ''), 'Por favor, relate o andamento desta demanda.'))
+  returning id into v_id;
+  for v_s in select servidor_id from public.demanda_responsaveis where demanda_id = p_demanda and ativo loop
+    v_u := app.usuario_do_servidor(v_s);
+    if v_u is not null then
+      perform app.notificar(v_u, 'demanda_pedido_atualizacao', 'Pedido de atualização', app.titulo_demanda(p_demanda), '/demandas/ficha?id=' || p_demanda);
+    end if;
+  end loop;
+  perform app.historico(p_demanda, 'pedido_atualizacao');
+  return v_id;
+end $$;
+
+-- feedback da chefia em uma mensagem
+create or replace function public.dar_feedback(p_mensagem uuid, p_feedback public.feedback_mensagem, p_comentario text default null)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare m public.demanda_mensagens; v_rotulo text := case p_feedback when 'aprovado' then 'Aprovado' when 'ajustar' then 'Ajustar' else 'Refazer' end;
+begin
+  select * into m from public.demanda_mensagens where id = p_mensagem;
+  if not found then perform app.erro('Mensagem não encontrada.', 'P0002'); end if;
+  if not app.pode_gerir_demanda((select unidade_id from public.demandas where id = m.demanda_id)) then
+    perform app.erro('Somente a chefia ou a Secretária dão feedback.', '42501');
+  end if;
+  if m.autor_id = auth.uid() then perform app.erro('Feedback é sobre a mensagem de outra pessoa.', '22023'); end if;
+  update public.demanda_mensagens set feedback = p_feedback, feedback_comentario = nullif(btrim(coalesce(p_comentario, '')), ''),
+    feedback_por = auth.uid(), feedback_em = now() where id = p_mensagem;
+  perform app.historico(m.demanda_id, 'feedback', jsonb_build_object('feedback', v_rotulo, 'comentario', p_comentario));
+  perform app.notificar(m.autor_id, 'demanda_feedback', 'Feedback: ' || v_rotulo, app.titulo_demanda(m.demanda_id), '/demandas/ficha?id=' || m.demanda_id);
+end $$;
+
+-- colegas para menção com @ (nomes do organograma; sem dados pessoais)
+create or replace function public.usuarios_mencionaveis(p_termo text)
+returns table (usuario_id uuid, nome text, unidade text)
+language sql stable security definer set search_path = ''
+as $$
+  select u.id, s.nome_completo, un.sigla
+    from public.usuarios u join public.servidores s on s.id = u.servidor_id join public.unidades un on un.id = s.unidade_id
+   where app.sessao_ok() and u.ativo and s.situacao = 'ativo' and length(btrim(coalesce(p_termo, ''))) >= 1
+     and app.normalizar(s.nome_completo) like '%' || replace(replace(app.normalizar(btrim(p_termo)), '%', ''), '_', '') || '%'
+   order by s.nome_completo limit 8
+$$;
+
+-- ===== anexos (bucket privado "demandas"; acesso igual ao da demanda) =====
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('demandas', 'demandas', false, 20971520, array['application/pdf', 'image/png', 'image/jpeg',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+create or replace function app.demanda_do_caminho(p_nome text)
+returns uuid language sql immutable set search_path = ''
+as $$ select case when p_nome ~ '^demandas/[0-9a-f-]{36}/[0-9a-f-]{36}\.(pdf|png|jpg|docx|xlsx)$' then (split_part(p_nome, '/', 2))::uuid end $$;
+grant execute on function app.demanda_do_caminho(text) to authenticated;
+
+create or replace function app.pode_anexar(p_demanda uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $$ select p_demanda is not null and (app.eh_responsavel(p_demanda) or app.pode_gerir_demanda((select unidade_id from public.demandas where id = p_demanda))) $$;
+grant execute on function app.pode_anexar(uuid) to authenticated;
+
+create policy demandas_anexo_enviar on storage.objects for insert to authenticated with check (
+  bucket_id = 'demandas' and (select app.pode_anexar(app.demanda_do_caminho(name)))
+);
+create policy demandas_anexo_ler on storage.objects for select to authenticated using (
+  bucket_id = 'demandas' and (select app.pode_ver_demanda(app.demanda_do_caminho(name)))
+);
+
+create or replace function public.registrar_anexo(p_demanda uuid, p_path text, p_nome text, p_tipo text, p_tamanho integer, p_substitui uuid default null)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid; v_versao integer := 1;
+begin
+  if not app.pode_anexar(p_demanda) then perform app.erro('Somente responsáveis ou a chefia anexam arquivos.', '42501'); end if;
+  if app.demanda_do_caminho(p_path) is distinct from p_demanda
+     or not exists (select 1 from storage.objects o where o.bucket_id = 'demandas' and o.name = p_path) then
+    perform app.erro('Arquivo inválido.', '22023');
+  end if;
+  if p_substitui is not null then
+    select versao + 1 into v_versao from public.demanda_anexos where id = p_substitui and demanda_id = p_demanda;
+    if v_versao is null then perform app.erro('Anexo a substituir não encontrado.', 'P0002'); end if;
+  end if;
+  insert into public.demanda_anexos (demanda_id, nome, path, tipo, tamanho, versao, substitui_id, enviado_por)
+  values (p_demanda, left(regexp_replace(coalesce(p_nome, 'arquivo'), '[^A-Za-zÀ-ÿ0-9 ._()-]', '_', 'g'), 120), p_path, p_tipo, p_tamanho, v_versao, p_substitui, auth.uid())
+  returning id into v_id;
+  perform app.historico(p_demanda, case when p_substitui is null then 'anexo' else 'anexo_nova_versao' end,
+    jsonb_build_object('nome', left(p_nome, 120), 'versao', v_versao));
+  return v_id;
+end $$;
+
+-- ===== ficha completa (uma chamada) =====
+create or replace function public.demanda_detalhe(p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+declare d public.demandas;
+begin
+  if not app.pode_ver_demanda(p_id) then return null; end if;
+  select * into d from public.demandas where id = p_id;
+  return jsonb_build_object(
+    'demanda', to_jsonb(d) - 'ultimo_aviso_prazo' || jsonb_build_object(
+      'unidade', (select sigla from public.unidades where id = d.unidade_id),
+      'criado_por_nome', app.nome_usuario(d.criado_por),
+      'dias_uteis', case when d.prazo is null then null else public.dias_uteis_entre(current_date, d.prazo) end),
+    'permissoes', jsonb_build_object('gerir', app.pode_gerir_demanda(d.unidade_id), 'responsavel', app.eh_responsavel(p_id),
+      'anexar', app.pode_anexar(p_id), 'proprio_criador', d.criado_por = auth.uid()),
+    'responsaveis', coalesce((select jsonb_agg(jsonb_build_object('servidor_id', s.id, 'nome', s.nome_completo, 'papel', r.papel, 'usuario_id', app.usuario_do_servidor(s.id)) order by r.papel, s.nome_completo)
+                                from public.demanda_responsaveis r join public.servidores s on s.id = r.servidor_id where r.demanda_id = p_id and r.ativo), '[]'::jsonb),
+    'checklist', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'texto', c.texto, 'feito', c.feito, 'responsavel', (select nome_completo from public.servidores where id = c.responsavel_id),
+                                  'feito_por', app.nome_usuario(c.feito_por), 'feito_em', c.feito_em) order by c.ordem)
+                             from public.demanda_checklist c where c.demanda_id = p_id and not c.removido), '[]'::jsonb),
+    'mensagens', coalesce((select jsonb_agg(jsonb_build_object('id', m.id, 'tipo', m.tipo, 'texto', m.texto, 'autor_id', m.autor_id, 'autor', app.nome_usuario(m.autor_id),
+                                  'criado_em', m.criado_em, 'editado_em', m.editado_em, 'feedback', m.feedback, 'feedback_comentario', m.feedback_comentario,
+                                  'feedback_por', app.nome_usuario(m.feedback_por), 'anexo', (select jsonb_build_object('id', a.id, 'nome', a.nome, 'path', a.path) from public.demanda_anexos a where a.id = m.anexo_id))
+                                  order by m.criado_em) from public.demanda_mensagens m where m.demanda_id = p_id), '[]'::jsonb),
+    'anexos', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'nome', a.nome, 'path', a.path, 'tipo', a.tipo, 'tamanho', a.tamanho, 'versao', a.versao,
+                                  'substitui_id', a.substitui_id, 'enviado_por', app.nome_usuario(a.enviado_por), 'enviado_em', a.enviado_em) order by a.enviado_em)
+                          from public.demanda_anexos a where a.demanda_id = p_id), '[]'::jsonb),
+    'historico', coalesce((select jsonb_agg(jsonb_build_object('em', h.em, 'ator', app.nome_usuario(h.ator_id), 'acao', h.acao, 'detalhes', h.detalhes) order by h.em desc, h.id desc)
+                             from public.demanda_historico h where h.demanda_id = p_id), '[]'::jsonb)
+  );
+end $$;
+
+grant execute on function public.enviar_mensagem(uuid, text, uuid[], uuid) to authenticated;
+grant execute on function public.editar_mensagem(uuid, text) to authenticated;
+grant execute on function public.pedir_atualizacao(uuid, text) to authenticated;
+grant execute on function public.dar_feedback(uuid, public.feedback_mensagem, text) to authenticated;
+grant execute on function public.usuarios_mencionaveis(text) to authenticated;
+grant execute on function public.registrar_anexo(uuid, text, text, text, integer, uuid) to authenticated;
+grant execute on function public.demanda_detalhe(uuid) to authenticated;
+
+-- ===================== 20261128000300_fase3_rotinas_calendario_painel.sql =====================
+-- Fase 3 · recorrentes (6.15), substituto nas demandas (6.14), aviso de prazo (6.10),
+-- calendário (6.3), indicadores do painel (6.1) e busca geral com demandas (6.19)
+
+-- ===== demandas recorrentes =====
+create type public.periodicidade as enum ('mensal', 'trimestral', 'semestral', 'anual');
+create type public.situacao_recorrencia as enum ('ativa', 'pausada', 'encerrada');
+
+create table public.recorrencias (
+  id uuid primary key default gen_random_uuid(),
+  titulo text not null check (length(btrim(titulo)) between 3 and 200),
+  descricao text check (descricao is null or length(descricao) <= 5000),
+  unidade_id uuid not null references public.unidades (id),
+  periodicidade public.periodicidade not null,
+  prazo_dias_uteis integer not null check (prazo_dias_uteis between 1 and 120),
+  prioridade public.prioridade_demanda not null default 'media',
+  responsaveis uuid[] not null check (cardinality(responsaveis) between 1 and 20),
+  checklist text[] not null default '{}',
+  situacao public.situacao_recorrencia not null default 'ativa',
+  proxima_em date not null,
+  criado_por uuid not null references public.usuarios (id),
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+alter table public.demandas add constraint demandas_recorrencia_fk foreign key (recorrencia_id) references public.recorrencias (id);
+create trigger recorrencias_atualizado before update on public.recorrencias for each row execute function app.tocar_atualizado_em();
+alter table public.recorrencias enable row level security;
+revoke all on public.recorrencias from anon, authenticated;
+grant select on public.recorrencias to authenticated;
+create policy recorrencias_ler on public.recorrencias for select to authenticated using ((select app.pode_gerir_demanda(unidade_id)));
+create trigger recorrencias_auditoria after insert or update or delete on public.recorrencias for each row execute function app.auditar_linha();
+
+create or replace function public.salvar_recorrencia(p_id uuid, p_dados jsonb, p_responsaveis uuid[], p_checklist text[] default '{}')
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid := p_id; v_unidade uuid := (p_dados ->> 'unidade_id')::uuid; v_s uuid; v_inicio date := coalesce((p_dados ->> 'proxima_em')::date, current_date);
+begin
+  if p_id is not null then select unidade_id into v_unidade from public.recorrencias where id = p_id; end if;
+  if v_unidade is null or not app.pode_gerir_demanda(v_unidade) then perform app.erro('Somente a chefia da unidade cria modelos recorrentes.', '42501'); end if;
+  if coalesce(array_length(p_responsaveis, 1), 0) = 0 then perform app.erro('Indique pelo menos um responsável.', '22023'); end if;
+  foreach v_s in array p_responsaveis loop
+    if not app.gestor_geral() and not app.na_escopo((select unidade_id from public.servidores where id = v_s)) then perform app.erro('Responsável fora da sua unidade.', '42501'); end if;
+  end loop;
+  if v_inicio < current_date then perform app.erro('A primeira ocorrência deve ser hoje ou depois.', '22023'); end if;
+  if p_id is null then
+    insert into public.recorrencias (titulo, descricao, unidade_id, periodicidade, prazo_dias_uteis, prioridade, responsaveis, checklist, proxima_em, criado_por)
+    values (btrim(p_dados ->> 'titulo'), nullif(btrim(coalesce(p_dados ->> 'descricao', '')), ''), v_unidade, (p_dados ->> 'periodicidade')::public.periodicidade,
+            (p_dados ->> 'prazo_dias_uteis')::int, coalesce((p_dados ->> 'prioridade')::public.prioridade_demanda, 'media'), p_responsaveis,
+            coalesce(p_checklist, '{}'), v_inicio, auth.uid())
+    returning id into v_id;
+  else
+    -- editar o modelo vale só para as próximas ocorrências (as já criadas não mudam)
+    update public.recorrencias set titulo = btrim(p_dados ->> 'titulo'), descricao = nullif(btrim(coalesce(p_dados ->> 'descricao', '')), ''),
+      periodicidade = (p_dados ->> 'periodicidade')::public.periodicidade, prazo_dias_uteis = (p_dados ->> 'prazo_dias_uteis')::int,
+      prioridade = coalesce((p_dados ->> 'prioridade')::public.prioridade_demanda, prioridade), responsaveis = p_responsaveis,
+      checklist = coalesce(p_checklist, '{}'), proxima_em = coalesce((p_dados ->> 'proxima_em')::date, proxima_em)
+     where id = p_id and situacao <> 'encerrada';
+    if not found then perform app.erro('Modelo não encontrado ou encerrado.', 'P0002'); end if;
+  end if;
+  return v_id;
+exception when invalid_text_representation or invalid_datetime_format or datetime_field_overflow or not_null_violation then
+  perform app.erro('Dados inválidos.', '22023');
+end $$;
+
+create or replace function public.mudar_situacao_recorrencia(p_id uuid, p_situacao public.situacao_recorrencia)
+returns void language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not app.pode_gerir_demanda((select unidade_id from public.recorrencias where id = p_id)) then
+    perform app.erro('Pausar ou encerrar exige a chefia da unidade.', '42501');
+  end if;
+  update public.recorrencias set situacao = p_situacao where id = p_id and situacao <> 'encerrada';
+  if not found then perform app.erro('Modelo não encontrado ou já encerrado.', 'P0002'); end if;
+end $$;
+
+create or replace function app.proximo_periodo(d date, p public.periodicidade)
+returns date language sql immutable set search_path = ''
+as $$ select (d + case p when 'mensal' then interval '1 month' when 'trimestral' then interval '3 months' when 'semestral' then interval '6 months' else interval '1 year' end)::date $$;
+
+-- cria cada ocorrência uma única vez (constraint unique (recorrencia_id, ocorrencia_ref))
+create or replace function app.gerar_ocorrencias()
+returns integer language plpgsql security definer set search_path = ''
+as $$
+declare r public.recorrencias; v_id uuid; n integer := 0; v_item text; i integer;
+begin
+  for r in select * from public.recorrencias where situacao = 'ativa' and proxima_em <= current_date for update loop
+    insert into public.demandas (titulo, descricao, origem, unidade_id, prioridade, prazo, recorrencia_id, ocorrencia_ref, criado_por)
+    values (r.titulo, r.descricao, 'recorrente', r.unidade_id, r.prioridade, public.somar_dias_uteis(r.proxima_em, r.prazo_dias_uteis),
+            r.id, to_char(r.proxima_em, 'YYYY-MM-DD'), r.criado_por)
+    on conflict (recorrencia_id, ocorrencia_ref) do nothing
+    returning id into v_id;
+    if v_id is not null then
+      perform app.historico(v_id, 'criada_por_rotina', jsonb_build_object('modelo', r.id, 'referencia', to_char(r.proxima_em, 'DD/MM/YYYY')));
+      perform app.definir_titulares(v_id, (select array_agg(x) from unnest(r.responsaveis) x join public.servidores s on s.id = x and s.situacao = 'ativo'));
+      i := 0;
+      foreach v_item in array r.checklist loop
+        insert into public.demanda_checklist (demanda_id, texto, ordem) values (v_id, left(v_item, 300), i); i := i + 1;
+      end loop;
+      n := n + 1;
+    end if;
+    update public.recorrencias set proxima_em = app.proximo_periodo(proxima_em, periodicidade) where id = r.id;
+  end loop;
+  return n;
+end $$;
+
+-- ===== substituto nas demandas (6.14) =====
+create table public.substituicoes (
+  afastamento_id uuid primary key references public.afastamentos (id),
+  aplicada_em timestamptz not null default now(),
+  encerrada_em timestamptz
+);
+alter table public.substituicoes enable row level security;
+revoke all on public.substituicoes from anon, authenticated;
+
+create or replace function app.aplicar_substituicoes()
+returns integer language plpgsql security definer set search_path = ''
+as $$
+declare a record; d record; v_u uuid; v_chefe uuid; n integer := 0; v_primeiro date;
+begin
+  -- início: a partir do 1º dia útil do afastamento, substituto entra como responsável adicional (titular continua)
+  for a in select af.*, s.nome_completo as titular_nome, s.unidade_id, sb.nome_completo as substituto_nome
+             from public.afastamentos af join public.servidores s on s.id = af.servidor_id join public.servidores sb on sb.id = af.substituto_id
+            where af.status = 'aprovado' and af.substituto_id is not null and current_date <= af.fim
+  loop
+    v_primeiro := case when public.eh_dia_util(a.inicio) then a.inicio else public.somar_dias_uteis(a.inicio, 1) end;
+    continue when current_date < v_primeiro or v_primeiro > a.fim;
+    for d in select dm.id from public.demandas dm join public.demanda_responsaveis r on r.demanda_id = dm.id
+              where r.servidor_id = a.servidor_id and r.ativo and r.papel = 'titular'
+                and dm.status in ('a_fazer', 'em_andamento', 'aguardando_terceiros', 'em_revisao')
+                and not exists (select 1 from public.demanda_responsaveis x where x.demanda_id = dm.id and x.servidor_id = a.substituto_id and x.ativo)
+    loop
+      insert into public.demanda_responsaveis as r (demanda_id, servidor_id, papel, ativo, afastamento_id)
+      values (d.id, a.substituto_id, 'substituto', true, a.id)
+      on conflict (demanda_id, servidor_id) do update set papel = 'substituto', ativo = true, afastamento_id = excluded.afastamento_id, removido_em = null;
+      perform app.historico(d.id, 'substituicao_inicio', jsonb_build_object('titular', a.titular_nome, 'substituto', a.substituto_nome, 'ate', a.fim));
+      n := n + 1;
+    end loop;
+    if not exists (select 1 from public.substituicoes where afastamento_id = a.id) then
+      insert into public.substituicoes (afastamento_id) values (a.id);
+      v_u := app.usuario_do_servidor(a.substituto_id);
+      if v_u is not null then
+        perform app.notificar(v_u, 'substituicao_inicio', 'Início de substituição', 'Você substitui ' || a.titular_nome || ' até ' || to_char(a.fim, 'DD/MM'), '/demandas');
+      end if;
+      for v_chefe in select app.chefes_da_unidade(a.unidade_id) loop
+        perform app.notificar(v_chefe, 'substituicao_inicio', 'Início de substituição', a.substituto_nome || ' substitui ' || a.titular_nome || ' até ' || to_char(a.fim, 'DD/MM'), '/ferias');
+      end loop;
+    end if;
+  end loop;
+  -- retorno: substituto sai das demandas que não concluiu
+  for a in select af.id, sb.nome_completo as substituto_nome from public.substituicoes su join public.afastamentos af on af.id = su.afastamento_id
+             join public.servidores sb on sb.id = af.substituto_id
+            where su.encerrada_em is null and (af.fim < current_date or af.status <> 'aprovado')
+  loop
+    for d in select r.demanda_id from public.demanda_responsaveis r join public.demandas dm on dm.id = r.demanda_id
+              where r.afastamento_id = a.id and r.papel = 'substituto' and r.ativo and dm.status <> 'concluida'
+    loop
+      update public.demanda_responsaveis set ativo = false, removido_em = now() where demanda_id = d.demanda_id and afastamento_id = a.id and papel = 'substituto';
+      perform app.historico(d.demanda_id, 'substituicao_fim', jsonb_build_object('substituto', a.substituto_nome));
+    end loop;
+    update public.substituicoes set encerrada_em = now() where afastamento_id = a.id;
+  end loop;
+  return n;
+end $$;
+
+-- ===== aviso de prazo próximo (hoje ou próximo dia útil), uma vez por dia =====
+create or replace function app.avisar_prazos()
+returns integer language plpgsql security definer set search_path = ''
+as $$
+declare d record; v_s uuid; v_u uuid; n integer := 0; v_dias integer;
+begin
+  for d in select * from public.demandas where status in ('a_fazer', 'em_andamento', 'aguardando_terceiros', 'em_revisao')
+             and prazo is not null and prazo >= current_date and ultimo_aviso_prazo is distinct from current_date loop
+    v_dias := public.dias_uteis_entre(current_date, d.prazo);
+    continue when v_dias > 1;
+    for v_s in select servidor_id from public.demanda_responsaveis where demanda_id = d.id and ativo loop
+      v_u := app.usuario_do_servidor(v_s);
+      if v_u is not null then
+        perform app.notificar(v_u, 'demanda_prazo', case when v_dias = 0 then 'Prazo vence hoje' else 'Prazo vence no próximo dia útil' end,
+          '#' || d.numero || ' ' || d.titulo, '/demandas/ficha?id=' || d.id);
+      end if;
+    end loop;
+    update public.demandas set ultimo_aviso_prazo = current_date where id = d.id;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
+create or replace function app.rotinas_diarias_demandas()
+returns void language plpgsql security definer set search_path = ''
+as $$ begin perform app.gerar_ocorrencias(); perform app.aplicar_substituicoes(); perform app.avisar_prazos(); end $$;
+revoke execute on function app.rotinas_diarias_demandas() from public, anon, authenticated;
+revoke execute on function app.gerar_ocorrencias() from public, anon, authenticated;
+revoke execute on function app.aplicar_substituicoes() from public, anon, authenticated;
+revoke execute on function app.avisar_prazos() from public, anon, authenticated;
+
+do $$
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform cron.schedule('rotinas-diarias-demandas', '5 9 * * *', 'select app.rotinas_diarias_demandas()');  -- 06:05 de Brasília
+  end if;
+exception when others then
+  raise notice 'pg_cron indisponível: agendar app.rotinas_diarias_demandas() manualmente';
+end $$;
+
+-- ===== calendário (6.3) =====
+create type public.tipo_compromisso as enum ('compromisso', 'prazo');
+
+create table public.compromissos (
+  id uuid primary key default gen_random_uuid(),
+  unidade_id uuid references public.unidades (id),   -- null = calendário geral do Gabinete (Secretária)
+  titulo text not null check (length(btrim(titulo)) between 2 and 200),
+  descricao text check (descricao is null or length(descricao) <= 2000),
+  local text check (local is null or length(local) <= 200),
+  tipo public.tipo_compromisso not null default 'compromisso',
+  inicio timestamptz not null,
+  fim timestamptz not null,
+  dia_inteiro boolean not null default false,
+  cancelado boolean not null default false,
+  criado_por uuid not null references public.usuarios (id),
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  constraint compromissos_periodo check (fim >= inicio and fim - inicio <= interval '31 days')
+);
+create index compromissos_inicio_idx on public.compromissos (inicio);
+create trigger compromissos_atualizado before update on public.compromissos for each row execute function app.tocar_atualizado_em();
+create table public.compromisso_participantes (
+  compromisso_id uuid not null references public.compromissos (id) on delete cascade,
+  servidor_id uuid not null references public.servidores (id),
+  primary key (compromisso_id, servidor_id)
+);
+
+create or replace function app.pode_editar_calendario(p_unidade uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $$
+  select app.gestor_geral()
+      or (p_unidade is not null and app.sessao_ok() and app.perfil_atual() in ('diretor', 'coordenador')
+          and app.tem_modulo('calendario') and app.na_escopo(p_unidade))
+$$;
+
+create or replace function app.pode_ver_compromisso(p_id uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $$
+  select app.sessao_ok() and exists (
+    select 1 from public.compromissos c where c.id = p_id and (
+      app.pode_editar_calendario(c.unidade_id)
+      or exists (select 1 from public.compromisso_participantes p where p.compromisso_id = c.id and p.servidor_id = app.servidor_atual())
+    ))
+$$;
+grant execute on function app.pode_ver_compromisso(uuid) to authenticated;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['compromissos', 'compromisso_participantes'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from anon, authenticated', t);
+    execute format('grant select on public.%I to authenticated', t);
+    execute format('create trigger %I after insert or update or delete on public.%I for each row execute function app.auditar_linha()', t || '_auditoria', t);
+  end loop;
+end $$;
+create policy compromissos_ler on public.compromissos for select to authenticated using ((select app.pode_ver_compromisso(id)));
+create policy compromisso_part_ler on public.compromisso_participantes for select to authenticated using ((select app.pode_ver_compromisso(compromisso_id)));
+
+create or replace function public.salvar_compromisso(p_id uuid, p_dados jsonb, p_participantes uuid[] default '{}')
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid := p_id; v_unidade uuid := nullif(p_dados ->> 'unidade_id', '')::uuid; v_s uuid; v_u uuid;
+begin
+  if p_id is not null then select unidade_id into v_unidade from public.compromissos where id = p_id; end if;
+  if not app.pode_editar_calendario(v_unidade) then perform app.erro('Você só pode editar o calendário da sua unidade.', '42501'); end if;
+  if p_id is null then
+    insert into public.compromissos (unidade_id, titulo, descricao, local, tipo, inicio, fim, dia_inteiro, criado_por)
+    values (v_unidade, btrim(p_dados ->> 'titulo'), nullif(btrim(coalesce(p_dados ->> 'descricao', '')), ''), nullif(btrim(coalesce(p_dados ->> 'local', '')), ''),
+            coalesce((p_dados ->> 'tipo')::public.tipo_compromisso, 'compromisso'), (p_dados ->> 'inicio')::timestamptz,
+            coalesce((p_dados ->> 'fim')::timestamptz, (p_dados ->> 'inicio')::timestamptz), coalesce((p_dados ->> 'dia_inteiro')::boolean, false), auth.uid())
+    returning id into v_id;
+  else
+    update public.compromissos set titulo = btrim(p_dados ->> 'titulo'), descricao = nullif(btrim(coalesce(p_dados ->> 'descricao', '')), ''),
+      local = nullif(btrim(coalesce(p_dados ->> 'local', '')), ''), tipo = coalesce((p_dados ->> 'tipo')::public.tipo_compromisso, tipo),
+      inicio = (p_dados ->> 'inicio')::timestamptz, fim = coalesce((p_dados ->> 'fim')::timestamptz, (p_dados ->> 'inicio')::timestamptz),
+      dia_inteiro = coalesce((p_dados ->> 'dia_inteiro')::boolean, dia_inteiro)
+     where id = p_id and not cancelado;
+    if not found then perform app.erro('Compromisso não encontrado ou cancelado.', 'P0002'); end if;
+  end if;
+  delete from public.compromisso_participantes where compromisso_id = v_id and not (servidor_id = any (coalesce(p_participantes, '{}'::uuid[])));
+  foreach v_s in array coalesce(p_participantes, '{}'::uuid[]) loop
+    insert into public.compromisso_participantes (compromisso_id, servidor_id) values (v_id, v_s) on conflict do nothing;
+    if found then
+      v_u := app.usuario_do_servidor(v_s);
+      if v_u is not null and v_u is distinct from auth.uid() then
+        perform app.notificar(v_u, 'compromisso', 'Você foi incluído em um compromisso',
+          btrim(p_dados ->> 'titulo') || ' · ' || to_char(((p_dados ->> 'inicio')::timestamptz) at time zone 'America/Maceio', 'DD/MM HH24:MI'), '/calendario');
+      end if;
+    end if;
+  end loop;
+  return v_id;
+exception when invalid_text_representation or invalid_datetime_format or datetime_field_overflow or not_null_violation then
+  perform app.erro('Dados inválidos.', '22023');
+end $$;
+
+create or replace function public.cancelar_compromisso(p_id uuid)
+returns void language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not app.pode_editar_calendario((select unidade_id from public.compromissos where id = p_id)) then perform app.erro('Sem permissão.', '42501'); end if;
+  update public.compromissos set cancelado = true where id = p_id and not cancelado;
+  if not found then perform app.erro('Compromisso não encontrado.', 'P0002'); end if;
+end $$;
+
+-- eventos do período: compromissos, prazos de demandas e feriados — cada um só o que a pessoa pode ver
+create or replace function public.eventos_calendario(p_inicio date, p_fim date)
+returns table (tipo text, id uuid, titulo text, inicio timestamptz, fim timestamptz, dia_inteiro boolean, unidade_id uuid, unidade text,
+               local text, descricao text, participantes jsonb, editavel boolean)
+language sql stable security definer set search_path = ''
+as $$
+  select c.tipo::text, c.id, c.titulo, c.inicio, c.fim, c.dia_inteiro, c.unidade_id, coalesce(u.sigla, 'Geral do Gabinete'), c.local, c.descricao,
+         coalesce((select jsonb_agg(jsonb_build_object('servidor_id', s.id, 'nome', s.nome_completo) order by s.nome_completo)
+                     from public.compromisso_participantes p join public.servidores s on s.id = p.servidor_id where p.compromisso_id = c.id), '[]'::jsonb),
+         app.pode_editar_calendario(c.unidade_id)
+    from public.compromissos c left join public.unidades u on u.id = c.unidade_id
+   where not c.cancelado and app.pode_ver_compromisso(c.id) and c.inicio < (p_fim + 1)::timestamptz and c.fim >= p_inicio::timestamptz
+  union all
+  select 'demanda', d.id, '#' || d.numero || ' ' || d.titulo, d.prazo::timestamptz, d.prazo::timestamptz, true, d.unidade_id, u.sigla, null, null,
+         coalesce((select jsonb_agg(jsonb_build_object('servidor_id', s.id, 'nome', s.nome_completo) order by s.nome_completo)
+                     from public.demanda_responsaveis r join public.servidores s on s.id = r.servidor_id where r.demanda_id = d.id and r.ativo), '[]'::jsonb),
+         false
+    from public.demandas d join public.unidades u on u.id = d.unidade_id
+   where d.prazo between p_inicio and p_fim and d.status in ('a_fazer', 'em_andamento', 'aguardando_terceiros', 'em_revisao') and app.pode_ver_demanda(d.id)
+  union all
+  select 'feriado', f.id, f.descricao, f.data::timestamptz, f.data::timestamptz, true, null, null, null, null, '[]'::jsonb, false
+    from public.feriados f where app.sessao_ok() and f.data between p_inicio and p_fim
+  order by 4
+$$;
+
+-- ===== painel (6.1) =====
+create or replace function public.painel_unidades()
+returns table (unidade_id uuid, a_fazer integer, em_andamento integer, concluidas integer, atrasadas integer, apertadas integer, concluidas_90 integer, no_prazo_90 integer)
+language sql stable security definer set search_path = ''
+as $$
+  select u.id,
+    count(*) filter (where d.status = 'a_fazer')::int,
+    count(*) filter (where d.status in ('em_andamento', 'aguardando_terceiros', 'em_revisao'))::int,
+    count(*) filter (where d.status = 'concluida' and d.concluida_em > now() - interval '30 days')::int,
+    count(*) filter (where d.status in ('a_fazer', 'em_andamento', 'aguardando_terceiros', 'em_revisao') and d.prazo < current_date)::int,
+    count(*) filter (where d.status in ('a_fazer', 'em_andamento', 'aguardando_terceiros', 'em_revisao') and d.prazo >= current_date
+                     and public.dias_uteis_entre(current_date, d.prazo) <= coalesce((select (valor)::int from public.configuracoes where chave = 'demandas.prazo_apertado_dias_uteis'), 2))::int,
+    count(*) filter (where d.status = 'concluida' and d.concluida_em > now() - interval '90 days' and d.prazo is not null)::int,
+    count(*) filter (where d.status = 'concluida' and d.concluida_em > now() - interval '90 days' and d.prazo is not null and (d.concluida_em at time zone 'America/Maceio')::date <= d.prazo)::int
+  from public.unidades u left join public.demandas d on d.unidade_id = u.id
+  where u.ativa and app.sessao_ok() and app.perfil_atual() <> 'funcionario' and u.id in (select app.unidades_escopo())
+  group by u.id
+$$;
+
+-- números do próprio servidor (painel do funcionário). Demanda com vários responsáveis conta para cada um.
+create or replace function public.meus_indicadores()
+returns jsonb language sql stable security definer set search_path = ''
+as $$
+  with minhas as (
+    select d.* from public.demandas d join public.demanda_responsaveis r on r.demanda_id = d.id
+     where r.servidor_id = app.servidor_atual() and app.sessao_ok()
+  )
+  select jsonb_build_object(
+    'abertas', (select count(*) from minhas where status in ('a_fazer', 'em_andamento', 'aguardando_terceiros', 'em_revisao')),
+    'atrasadas', (select count(*) from minhas where status in ('a_fazer', 'em_andamento', 'aguardando_terceiros', 'em_revisao') and prazo < current_date),
+    'concluidas_mes', (select count(*) from minhas where status = 'concluida' and date_trunc('month', concluida_em) = date_trunc('month', now())),
+    'no_prazo_pct', (select case when count(*) = 0 then null else round(100.0 * count(*) filter (where (concluida_em at time zone 'America/Maceio')::date <= prazo) / count(*)) end
+                       from minhas where status = 'concluida' and prazo is not null and concluida_em > now() - interval '90 days'),
+    'por_mes', (select jsonb_agg(jsonb_build_object('mes', to_char(m, 'YYYY-MM'),
+                  'concluidas', (select count(*) from minhas where status = 'concluida' and date_trunc('month', concluida_em) = m)) order by m)
+                  from generate_series(date_trunc('month', now()) - interval '5 months', date_trunc('month', now()), interval '1 month') m)
+  )
+$$;
+
+insert into public.configuracoes (chave, valor, descricao) values
+  ('demandas.prazo_apertado_dias_uteis', '2', 'Demanda aberta com prazo em até N dias úteis deixa a unidade em "Prazo apertado"')
+on conflict (chave) do nothing;
+
+-- ===== busca geral: + demandas (título, nº do processo ou #número) — invoker, RLS decide =====
+create or replace function public.busca_geral(termo text, limite integer default 8)
+returns table (tipo text, id uuid, titulo text, subtitulo text, rota text)
+language plpgsql stable security invoker set search_path = ''
+as $$
+declare q text := app.normalizar(btrim(coalesce(termo, '')));
+        lim integer := least(greatest(coalesce(limite, 8), 1), 20);
+        num bigint := case when btrim(coalesce(termo, '')) ~ '^#?[0-9]{1,12}$' then ltrim(btrim(termo), '#')::bigint end;
+begin
+  if length(q) < 2 and num is null then return; end if;
+  q := '%' || replace(replace(replace(q, '\', '\\'), '%', '\%'), '_', '\_') || '%';
+  return query
+    (select 'demanda'::text, d.id, '#' || d.numero || ' ' || d.titulo, coalesce('Processo ' || d.numero_processo, 'Demanda'), '/demandas/ficha?id=' || d.id
+       from public.demandas d
+      where app.normalizar(d.titulo) like q or app.normalizar(coalesce(d.numero_processo, '')) like q or d.numero = num
+      order by d.numero desc limit lim)
+    union all
+    (select 'unidade'::text, u.id, u.sigla, u.nome, '/usuarios?unidade=' || u.id
+       from public.unidades u
+      where app.normalizar(u.sigla) like q or app.normalizar(u.nome) like q
+      order by u.sigla limit lim)
+    union all
+    (select 'servidor'::text, s.id, s.nome_completo, 'Matrícula ' || s.matricula, '/usuarios?servidor=' || s.id
+       from public.servidores s
+      where app.normalizar(s.nome_completo) like q or app.normalizar(s.matricula) like q
+      order by s.nome_completo limit lim);
+end $$;
+
+update public.modulos set status = 'ativo' where codigo = 'demandas';
+
+grant execute on function public.salvar_recorrencia(uuid, jsonb, uuid[], text[]) to authenticated;
+grant execute on function public.mudar_situacao_recorrencia(uuid, public.situacao_recorrencia) to authenticated;
+grant execute on function public.salvar_compromisso(uuid, jsonb, uuid[]) to authenticated;
+grant execute on function public.cancelar_compromisso(uuid) to authenticated;
+grant execute on function public.eventos_calendario(date, date) to authenticated;
+grant execute on function public.painel_unidades() to authenticated;
+grant execute on function public.meus_indicadores() to authenticated;
+grant execute on function public.busca_geral(text, integer) to authenticated;

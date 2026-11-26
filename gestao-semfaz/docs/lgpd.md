@@ -24,6 +24,15 @@ Situação: **rascunho da Fase 1**. Atualizar a cada fase. Nenhum dado real ante
 | Folhas de ponto (PDF do RH e PDFs por unidade) | Servidor | Distribuir e controlar a entrega das folhas | Secretária e administrador (todas); chefia (só a própria unidade) | bucket privado `folhas-ponto`, `folhas_*` |
 | Registro de entrega (quem recebeu/devolveu, datas) | Servidor | Controle da devolução assinada | Chefia da unidade; secretária; administrador | `folhas_entregas` |
 
+## Fase 3
+
+| Dado | Titular | Finalidade | Quem acessa | Onde |
+|---|---|---|---|---|
+| Demandas atribuídas, conclusões e prazos (base da produtividade) | Servidor | Acompanhar o trabalho | O próprio; chefia do escopo; secretária; admin | `demandas`, `demanda_responsaveis` |
+| Mensagens, menções e feedback da chefia | Servidor | Comunicação sobre a demanda | Participantes da demanda | `demanda_mensagens` (nunca apagadas) |
+| Anexos de demandas | — | Instrução da demanda | Mesmo acesso da demanda | bucket privado `demandas` |
+| Compromissos e participantes | Servidor | Agenda | Chefia do calendário e participantes | `compromissos` |
+
 ## Próximas fases (previsto pelo prompt)
 
 - Saldos de férias, licenças-prêmio, folgas e produtividade: **dados pessoais**, visíveis só ao próprio servidor, à chefia da unidade, à Secretária e ao Administrador.
