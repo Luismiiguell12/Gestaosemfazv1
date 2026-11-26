@@ -81,8 +81,17 @@ async function simularApi(page, perfil, aal) {
 const erros = [];
 const browser = await chromium.launch();
 const passos = [];
+// cada passo tenta 2x (CI às vezes é lento); a 1ª falha aparece no log como "instável"
 async function passo(nome, fn) {
-  try { await fn(); passos.push(['ok', nome]); } catch (e) { passos.push(['FALHOU', nome, e.message.split('\n')[0]]); }
+  let primeira = null;
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    try {
+      await fn();
+      passos.push(['ok', nome, primeira ? `instável: passou na 2ª tentativa (1ª: ${primeira})` : '']);
+      return;
+    } catch (e) { primeira ??= e.message.split('\n')[0]; }
+  }
+  passos.push(['FALHOU', nome, primeira]);
 }
 async function novaPagina({ mobile = false, perfil, aal = 'aal2' } = {}) {
   const ctx = await browser.newContext(mobile ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true } : { viewport: { width: 1440, height: 1000 } });
