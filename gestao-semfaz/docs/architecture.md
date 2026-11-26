@@ -49,8 +49,8 @@ gestao-semfaz/
 │   ├── migrations/             SQL versionado (fonte do banco)
 │   ├── seed.sql                dados FICTÍCIOS de desenvolvimento
 │   └── functions/              Edge Functions (Deno)
-│       ├── _shared/            CORS, validação, erros genéricos
-│       └── convidar-usuario/
+│       └── convidar-usuario/  arquivo único (CORS, validação, erros genéricos)
+│   └── deploy/banco-completo.sql  migrations juntas p/ o SQL Editor (gerado)
 ├── scripts/
 │   ├── criar-primeiro-admin.mjs  script local (service-role via env)
 │   ├── csp.mjs                   pós-build: CSP com hashes dos scripts inline

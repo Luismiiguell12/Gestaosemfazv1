@@ -76,7 +76,7 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 
 ## Outras pendências técnicas
 
-- Validar as migrations no Supabase real (`supabase db reset`), que não rodou neste ambiente.
+- Validar as migrations no Supabase real, que não rodou neste ambiente. Pode ser pela web: colar `supabase/deploy/banco-completo.sql` no SQL Editor de um projeto novo (arquivo gerado por `scripts/gerar-sql-unico.mjs`; um teste garante que está em dia).
 - Ativar no GitHub: secret scanning, push protection e Dependabot alerts (configuração do repositório, não por código).
 - Criar projetos Supabase de homologação e produção (região São Paulo) e configurar SMTP próprio para os e-mails de convite e recuperação.
 - Configurar no painel do Supabase o hook `custom_access_token_hook` (no local já está no `config.toml`).

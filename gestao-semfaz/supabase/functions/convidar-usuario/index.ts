@@ -2,8 +2,49 @@
 // A gravação em public.usuarios é feita pela RPC registrar_convite COM O TOKEN de quem convida
 // (auditoria registra o autor real). service-role só aqui, no servidor.
 import { createClient } from 'npm:@supabase/supabase-js@2.119.2';
-import { cabecalhosCors, ehUuid, falha, lerJson, ORIGEM_PERMITIDA, resposta } from '../_shared/http.ts';
 
+// Arquivo único (pode ser colado no editor de Edge Functions do painel web).
+// ---- utilitários: CORS restrito, respostas e erros genéricos ----
+const ORIGEM_PERMITIDA = Deno.env.get('ALLOWED_ORIGIN') ?? '';
+
+function cabecalhosCors(req: Request): Record<string, string> | null {
+  const origem = req.headers.get('origin') ?? '';
+  if (!ORIGEM_PERMITIDA || origem !== ORIGEM_PERMITIDA) return null;
+  return {
+    'Access-Control-Allow-Origin': ORIGEM_PERMITIDA,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Max-Age': '600',
+    Vary: 'Origin',
+  };
+}
+
+function resposta(status: number, corpo: Record<string, unknown>, cors: Record<string, string> | null) {
+  return new Response(JSON.stringify(corpo), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...(cors ?? {}) },
+  });
+}
+
+/** erro genérico: nunca devolve detalhes internos nem dados pessoais */
+const falha = (status: number, cors: Record<string, string> | null, mensagem = 'Não foi possível concluir.') =>
+  resposta(status, { erro: mensagem }, cors);
+
+async function lerJson(req: Request, limiteBytes = 2048): Promise<Record<string, unknown> | null> {
+  const texto = await req.text();
+  if (texto.length > limiteBytes) return null;
+  try {
+    const v = JSON.parse(texto);
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+const ehUuid = (v: unknown): v is string =>
+  typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+// ---- função ----
 const URL_SUPA = Deno.env.get('SUPABASE_URL')!;
 const ANON = Deno.env.get('SUPABASE_ANON_KEY')!;
 const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
