@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useMemo, useState, type DragEvent } from 'react';
 import { AppShell, Cabecalho } from '@/components/layout/AppShell';
 import { NovaDemanda, SugerirDemanda } from '@/components/demandas/Formularios';
@@ -31,7 +31,8 @@ function Quadro() {
   const todas = (lista.dados as DemandaLista[] | null) ?? [];
 
   const [visao, setVisao] = useState<'quadro' | 'lista'>('quadro');
-  const [f, setF] = useState({ unidade: '', responsavel: '', origem: '', prioridade: '', busca: '' });
+  const params = useSearchParams();
+  const [f, setF] = useState({ unidade: params.get('unidade') ?? '', responsavel: '', origem: '', prioridade: '', busca: '' });
   const [verSugestoes, setVerSugestoes] = useState(false);
   const [nova, setNova] = useState(false);
   const [sugerir, setSugerir] = useState(false);
