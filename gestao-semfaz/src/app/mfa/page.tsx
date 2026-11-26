@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Aviso, Campo } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
+import { qrCodeSrc } from '@/lib/qrcode';
 import { useSessao } from '@/lib/sessao';
 
 // Verificação em duas etapas (TOTP). Obrigatória p/ administrador e secretária (aplicado no banco).
@@ -27,7 +28,7 @@ export default function MfaPage() {
       const { data: novo, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Gestão SEMFAZ' });
       if (error || !novo?.totp) { setErro('Não foi possível iniciar a configuração.'); return; }
       setFator(novo.id);
-      setQr(`data:image/svg+xml;utf-8,${encodeURIComponent(novo.totp.qr_code)}`);
+      setQr(qrCodeSrc(novo.totp.qr_code));
       setSegredo(novo.totp.secret);
     })();
   }, [carregando, session, router]);

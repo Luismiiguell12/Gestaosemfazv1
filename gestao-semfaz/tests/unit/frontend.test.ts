@@ -94,3 +94,14 @@ describe('segurança do código do frontend', () => {
     expect(readFileSync(join(raiz, '.gitignore'), 'utf8')).toMatch(/^\.env$/m);
   });
 });
+
+import { qrCodeSrc } from '@/lib/qrcode';
+describe('QR code do MFA', () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg"><path fill="#000" d="M0 0h1"/></svg>';
+  const esperado = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  it('aceita SVG puro', () => expect(qrCodeSrc(svg)).toBe(esperado));
+  it('aceita data URL já pronta (formato atual do Supabase), sem prefixo duplicado', () => {
+    expect(qrCodeSrc(`data:image/svg+xml;utf-8,${svg}`)).toBe(esperado);
+    expect(qrCodeSrc(`data:image/svg+xml;utf-8,${encodeURIComponent(svg)}`)).toBe(esperado);
+  });
+});
