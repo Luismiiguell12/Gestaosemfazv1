@@ -23,12 +23,12 @@ h1, h2, h3 { color: var(--cor-texto-forte); }
 .menu-marca-sub { font-size: 11px; color: var(--cor-texto-menu-suave); }
 .menu-item {
   display: flex; align-items: center; gap: 11px; min-height: 42px; padding: 0 12px; border-radius: var(--raio-sm);
-  text-decoration: none; font-size: 14px; font-weight: 400; color: var(--cor-texto-menu); background: transparent; border: 0;
+  text-decoration: none; font-size: 14px; font-weight: 500; color: var(--cor-texto-menu); background: transparent; border: 0;
   width: 100%; text-align: left; cursor: pointer;
 }
 .menu-item:hover { color: #fff; background: rgba(255, 255, 255, .06); }
 .menu-item[aria-current='page'] { color: #fff; background: var(--cor-primaria); font-weight: 600; }
-.menu-item[aria-disabled='true'] { cursor: default; opacity: .75; }
+.menu-item[aria-disabled='true'] { cursor: default; opacity: .8; }
 .menu-item[aria-disabled='true']:hover { background: transparent; color: var(--cor-texto-menu); }
 .menu-item svg { flex: none; }
 .menu-item > span:not(.menu-tag) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -4,16 +4,16 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 
 ## Fase atual
 
-**Fase 6 — Relatórios e exportações**: implementada, aguardando validação (27/11/2026). A Fase 5 (Produtividade) foi pulada por enquanto porque depende das regras da SEMFAZ. A pedido do responsável, as Fases 1 a 4 serão testadas e corrigidas depois, com um roteiro geral de testes.
+**Fase 6 — Relatórios e exportações**: implementada, aplicada no Supabase de testes e publicada; aguardando validação (27/11/2026). A Fase 5 (Produtividade) foi pulada por enquanto porque depende das regras da SEMFAZ. A pedido do responsável, as Fases 1 a 4 serão testadas e corrigidas depois, com um roteiro geral de testes.
 
 | Fase | Situação |
 |---|---|
 | 1. Fundação | Concluída e publicada (testes do responsável pendentes) |
 | 2. Servidores, férias, folhas de ponto | Concluída e publicada (testes do responsável pendentes) |
-| 3. Demandas, calendário, painéis | Concluída e aplicada no Supabase de testes (aguardando validação) |
-| 4. Contratos, UCs, faturas, aluguéis | Concluída e aplicada no Supabase de testes (aguardando validação) |
+| 3. Demandas, calendário, painéis | Concluída, aplicada e publicada (aguardando validação) |
+| 4. Contratos, UCs, faturas, aluguéis | Concluída, aplicada e publicada (aguardando validação) |
 | 5. Produtividade | Não iniciada (aguardando as regras da SEMFAZ) |
-| 6. Relatórios e exportações | Concluída (aguardando validação; não aplicada no Supabase) |
+| 6. Relatórios e exportações | Concluída, aplicada no Supabase de testes e publicada (aguardando validação) |
 | 7. Testes finais e implantação | Não iniciada |
 
 ## Ambiente de desenvolvimento (verificado em 26/11/2026, ambiente de nuvem do Claude Code)
@@ -138,7 +138,7 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 ## Pendências da Fase 6
 
 - **Relatório de produtividade**: depende da Fase 5.
-- **Aplicar a migration `20261130000100_fase6_relatorios.sql` no Supabase de testes e republicar o site** (aguardando autorização).
+- ~~Aplicar a Fase 6 no Supabase de testes e republicar~~ **Feito em 27/11/2026** (PR #14). Conferido: 42 tabelas, todas com RLS; nada liberado para `anon`; 11 funções de relatório; site republicado com a tela nova.
 - Abrir os arquivos gerados no Excel e no LibreOffice e conferir a aparência (validação manual).
 
 ## Pendências da Fase 4
@@ -149,7 +149,7 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 - **Reajuste automático** pelo índice na data-base: não implementado (só registro do índice e do mês). O reajuste entra por aditivo ou alteração de valor aprovada.
 - Valor anual mostrado = valor mensal × 12 (o protótipo diz "anual (vigência)"; confirmar se deve ser o total da vigência).
 - ~~Aplicar as Fases 3 e 4 no Supabase de testes~~ **Feito em 27/11/2026** (PR #13 juntado; 8 migrations aplicadas em ordem). Conferido no banco real: 41 tabelas, todas com RLS; nada liberado para `anon`; buckets privados (anexos, contratos, demandas, folhas-ponto); CPF do locador sem acesso pela API; pg_cron com `rotinas-diarias-demandas` e `avisar-atrasos-folhas`; rotina diária executada sem erro.
-- **Republicar o site (GitHub Pages)** com as telas das Fases 3 e 4 (aguardando autorização).
+- ~~Republicar o site com as Fases 3 e 4~~ **Feito em 27/11/2026**.
 
 ## Pendências da Fase 3
 
