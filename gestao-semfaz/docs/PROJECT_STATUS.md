@@ -12,7 +12,7 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 | 2. Servidores, férias, folhas de ponto | Concluída e publicada (testes do responsável pendentes) |
 | 3. Demandas, calendário, painéis | Concluída, aplicada e publicada (aguardando validação) |
 | 4. Contratos, UCs, faturas, aluguéis | Concluída, aplicada e publicada (aguardando validação) |
-| 5. Produtividade | Não iniciada (aguardando as regras da SEMFAZ) |
+| 5. Produtividade | Não iniciada. Regras recebidas no **Adendo 01** (`docs/ADENDO-PRODUTIVIDADE.md`); campos de elegibilidade já criados |
 | 6. Relatórios e exportações | Concluída, aplicada no Supabase de testes e publicada (aguardando validação) |
 | 7. Testes finais e implantação | Não iniciada |
 
@@ -84,17 +84,52 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 | D51 | Toda exportação vai para a auditoria (relatório, formato, filtros, linhas). Limite: 60 exportações por usuário por hora (`relatorios.exportacoes_por_hora`); até 20.000 linhas na auditoria (`relatorios.linhas_max`) | Prompt 5.1 (limite em exportação) | **Sim** |
 | D52 | CSV com `;` e acentos (abre direto no Excel brasileiro); texto que começa com `=`, `+`, `-` ou `@` recebe `'` na frente (proteção contra fórmula maliciosa). Excel com números e datas de verdade, filtro e cabeçalho fixo. PDF em A4 paisagem com filtros, autor, data e páginas numeradas | Prompt 6.11 | Não |
 | D53 | Relatório extra "Entrega das folhas de ponto" (não está no protótipo); "Produtividade" fica visível e desabilitado ("em definição") | Prompt 6.11 ("cada módulo") | **Sim** |
+| D54 | **Adendo 01 – Produtividade** (`docs/ADENDO-PRODUTIVIDADE.md`) substitui a seção 6.4 do prompt e acrescenta regras às seções 6.7, 6.12 e 7.2 (tela 12). Em conflito, vale o adendo. Base: **minuta** de decreto (LC 138/2025, arts. 15-A a 15-E) → todo número fica em configuração versionada | Adendo 01 | Não |
+| D55 | Campos da seção 2 do adendo criados já agora (migration `20261130000200_adendo_servidores_cargos.sql`, só acrescenta colunas): `servidores.tipo_vinculo` (efetivo/comissionado/temporário), `servidores.exerce_comissao` (sim/não), `cargos.carreira_excluida` (sim/não, nenhum marcado) e `elegivel_adicional`, **calculado** pelo banco (efetivo e carreira não excluída), sem coluna digitável | Adendo 01, seção 2 e 12 | Não |
+| D56 | Vínculo obrigatório para cadastro novo e na importação de servidores (coluna "tipo de vínculo"; "cargo em comissão/função de confiança" opcional, sim/não). Servidores **já cadastrados ficam sem vínculo** até alguém informar por pedido de alteração — enquanto isso são **não elegíveis** (opção mais conservadora). Depois de informado, o vínculo não pode voltar a ficar vazio | Adendo 01, seção 2 | **Sim** |
+| D57 | Alterar vínculo e função de confiança do servidor e a marca de carreira excluída do cargo passa pela central de aprovações (dados já cadastrados) | Prompt 6.9 | Não |
 | D15 | Repositório público e GitHub Pages nesta fase (só dados fictícios). **Rever antes de qualquer dado real** (repositório privado / Cloudflare Pages / Netlify) | Prompt 7 | Rever antes de dados reais |
 
 ## Pendências (seção 9 do prompt)
 
 | Pendência | O que foi feito | Situação |
 |---|---|---|
-| Regras de produtividade (material dos fiscais) | Nada implementado. Item do menu marcado "em definição" | Aguardando SEMFAZ |
+| Regras de produtividade (material dos fiscais) | **Recebidas em 27/11/2026: Adendo 01** (`docs/ADENDO-PRODUTIVIDADE.md`), baseado na minuta do decreto do Adicional de Desempenho e Produtividade. Substitui a seção 6.4 do prompt e prevalece em caso de conflito. Implementação completa na Fase 5. Pendências próprias do adendo na seção "Adendo 01" abaixo | Recebidas (minuta; números configuráveis) |
 | Lista oficial de cargos | Tabela `cargos` configurável (via aprovação). Seed só com cargos fictícios de exemplo | Aguardando SEMFAZ |
 | Modelo das planilhas de importação | Fase 2: servidores e saldos. Fase 4: contratos (~60) e faturas, com colunas **provisórias** (modelo CSV baixável; aceita .xlsx e .csv; datas dd/mm/aaaa ou célula de data; valores 1.234,56). Cabeçalhos aceitam variações | Ajustar quando chegar o modelo oficial |
 | Permissões padrão por módulo e perfil | Tabela `pacotes_padrao` configurável, com coluna `provisorio = true`. Seed copia **o rascunho** da seção 4 só para decidir quais itens aparecem no menu. O acesso a dados é controlado pelas políticas de escopo de cada tabela | **Aguardando definição oficial. Não tratar como definitivo** |
 | Planilha do RH (saldos de férias, licença-prêmio, folgas) | Importação de saldos pronta (matrícula + 3 saldos), com prévia de erros | Ajustar colunas ao arquivo real do RH |
+
+## Adendo 01 – Produtividade (recebido em 27/11/2026)
+
+Arquivo: `docs/ADENDO-PRODUTIVIDADE.md`. Transforma o módulo de Produtividade na **avaliação mensal de desempenho** do decreto: avaliação pela chefia imediata (5 indicadores, até 70 pontos, com justificativa e prova obrigatórias), desempenho institucional quadrimestral por arrecadação (até 30 pontos), nota, mínimos, faixas e proporcionalidade, ciência, recurso, revisão, homologação com segregação de funções, encaminhamento à SEMAD (Anexos I e II) e dossiê para o Controle Interno.
+
+**Já feito (sem interromper a fase atual):** campos da seção 2 no cadastro (D55–D57). Testes: `tests/db/adendo.test.ts`.
+
+**Fica para a Fase 5 (implementação completa do adendo, seção 12):**
+- Tabela de regras versionada (indicadores, máximos, pesos, mínimos, faixas, transição, prazos) e cada ciclo gravando a versão usada.
+- Chefia imediata calculada pela estrutura + chefia substituta/designada por servidor; designações da autoridade revisora e da instância de homologação.
+- Ciclo mensal (máquina de estados no banco): abertura, avaliação com provas (registros do sistema, anexos, referência externa), painel de subsídios só com fatos (sem nota sugerida), avaliação parcial por período com média ponderada, ciência, recurso em dias úteis, revisão, homologação individual/lote, devolução, retificação.
+- Institucional: metas travadas após o início do quadrimestre, arrecadação manual e por planilha, apuração em `numeric` com memória de cálculo, permissão `produtividade.institucional.gerir`.
+- Nota total, regra de transição, enquadramento sem fração, mínimos cumulativos, faixas, proporcionalidade por dias corridos e afastamentos configuráveis; valor em R$ desligado por configuração.
+- Documentos e saídas: Anexo I, Anexo II, arquivo SEMAD (XLSX/CSV) e Dossiê do ciclo — entram também na tela de Relatórios (complemento da Fase 6).
+- Telas: Produtividade da equipe com as 7 abas da seção 10; bloco "Minha produtividade" no painel do funcionário.
+- Os 16 testes obrigatórios da seção 11, mais LGPD (`docs/lgpd.md`) e auditoria.
+- Data de entrada/saída na SEMFAZ (necessária para os dias elegíveis) será acrescentada ao cadastro de servidores na Fase 5.
+
+### Pendências do Adendo 01 (seção 13)
+
+| # | Pendência | Padrão adotado até a definição oficial |
+|---|---|---|
+| 1 | Lista de carreiras excluídas (§ 3º do art. 15-A da LC 138/2025) | Nenhum cargo marcado como carreira excluída |
+| 2 | Se o sistema calcula valor em R$ | Não calcula; entrega nota, percentual, fator e percentual efetivo. Campo de vencimento básico preparado e **desligado** |
+| 3 | Qual resultado institucional vale para cada mês | Último resultado homologado até o fechamento do mês; sem nenhum, regra de transição (configurável) |
+| 4 | Quem lança metas e arrecadação | Só Secretária e Administrador, que concedem a permissão `produtividade.institucional.gerir` (sugestão: ASPLAN metas; COACAM/CONTA arrecadação) |
+| 5 | Autoridade revisora e instância de homologação | Designação configurável (pessoas ou grupo), com início/fim, auditada |
+| 6 | Quais afastamentos contam como efetivo exercício | Férias, licença-prêmio e folga contam; tipos novos não contam até alguém configurar |
+| 7 | Prazo e forma de ciência quando o servidor não acessa o sistema | 3 dias úteis + registro da ciência por outro meio pela chefia (com anexo) |
+| 8 | Texto final do decreto (é minuta) | Todos os números configuráveis e versionados |
+| — | Vínculo dos servidores já cadastrados | Ficam "não informado" e não elegíveis até alguém informar (D56) |
 
 ## Testes da Fase 1 (executados em 26/11/2026, resultado real)
 

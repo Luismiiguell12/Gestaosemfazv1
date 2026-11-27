@@ -34,7 +34,12 @@ export const servidorNovo = z.object({
   cargo_id: uuid,
   unidade_id: uuid,
   email_institucional: z.union([email, z.literal('')]).optional().transform((v) => (v ? v : null)),
+  tipo_vinculo: z.enum(['efetivo', 'comissionado', 'temporario'], { error: 'Informe o tipo de vínculo.' }),
+  exerce_comissao: z.boolean(),
 });
+
+export const TIPOS_VINCULO = ['efetivo', 'comissionado', 'temporario'] as const;
+export const ROTULO_VINCULO: Record<(typeof TIPOS_VINCULO)[number], string> = { efetivo: 'Efetivo', comissionado: 'Comissionado', temporario: 'Temporário' };
 
 export const ABRANGENCIAS = ['nacional', 'estadual', 'municipal', 'ponto_facultativo'] as const;
 export const ROTULO_ABRANGENCIA: Record<(typeof ABRANGENCIAS)[number], string> = {

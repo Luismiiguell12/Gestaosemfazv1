@@ -75,10 +75,10 @@ describe('planilhas', () => {
     expect(tipoPlanilha(new Uint8Array([0x4d, 0x5a, 0x00, 0x01]))).toBeNull();
   });
   it('lê CSV com ; e aspas, e mapeia cabeçalhos com acento/maiúsculas', () => {
-    const csv = '﻿Nome;Matrícula;Cargo;Unidade;E-mail institucional;Saldo de férias;Saldo de licença-prêmio;Saldo de folgas\r\n"Silva; José";000777;Auditor Fiscal;COFIT;;30;0;"2"\r\n;;;;;;;\r\n';
+    const csv = '﻿Nome;Matrícula;Cargo;Unidade;E-mail institucional;Saldo de férias;Saldo de licença-prêmio;Saldo de folgas;Tipo de vínculo;Função de confiança\r\n"Silva; José";000777;Auditor Fiscal;COFIT;;30;0;"2";Efetivo;não\r\n;;;;;;;;;\r\n';
     const r = mapearColunas(lerCsv(csv), COLUNAS_SERVIDORES);
     expect(r.faltando).toEqual([]);
-    expect(r.linhas).toEqual([{ linha: '2', nome: 'Silva; José', matricula: '000777', cargo: 'Auditor Fiscal', unidade: 'COFIT', email: '', ferias: '30', licenca_premio: '0', folgas: '2' }]);
+    expect(r.linhas).toEqual([{ linha: '2', nome: 'Silva; José', matricula: '000777', cargo: 'Auditor Fiscal', unidade: 'COFIT', email: '', ferias: '30', licenca_premio: '0', folgas: '2', tipo_vinculo: 'Efetivo', exerce_comissao: 'não' }]);
   });
   it('aponta colunas obrigatórias faltando', () => {
     const r = mapearColunas([['matricula', 'ferias'], ['1', '2']], COLUNAS_SALDOS);

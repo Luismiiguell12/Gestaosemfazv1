@@ -12,9 +12,9 @@ import { ehChefia, ehGestorGeral, temModulo, useSessao } from '@/lib/sessao';
 import type { TipoSolicitacao } from '@/lib/solicitacoes';
 import { supabase } from '@/lib/supabase';
 import { useConsulta } from '@/lib/useConsulta';
-import { PERFIS, primeiroErro, ROTULO_PERFIL, servidorNovo, type Perfil } from '@/lib/validacao';
+import { PERFIS, primeiroErro, ROTULO_PERFIL, ROTULO_VINCULO, servidorNovo, TIPOS_VINCULO, type Perfil } from '@/lib/validacao';
 
-interface Servidor { id: string; nome_completo: string; matricula: string; cargo_id: string; unidade_id: string; situacao: 'ativo' | 'inativo'; email_institucional: string | null }
+interface Servidor { id: string; nome_completo: string; matricula: string; cargo_id: string; unidade_id: string; situacao: 'ativo' | 'inativo'; email_institucional: string | null; tipo_vinculo: 'efetivo' | 'comissionado' | 'temporario' | null; exerce_comissao: boolean; elegivel_adicional: boolean }
 interface Usuario { id: string; servidor_id: string; perfil: Perfil; ativo: boolean }
 interface Extra { usuario_id: string; modulo_codigo: string }
 interface UnExtra { usuario_id: string; unidade_id: string }
@@ -47,7 +47,7 @@ function Tela() {
   const q = <T,>(fn: () => PromiseLike<{ data: T | null; error: unknown }>) => useConsulta(async () => fn(), [versao]);
   const unidades = q(() => supabase.from('unidades').select('id,sigla,nome,tipo,unidade_pai_id,ordem,ativa'));
   const escopo = q(() => supabase.rpc('minhas_unidades_escopo'));
-  const servidores = q(() => supabase.from('servidores').select('id,nome_completo,matricula,cargo_id,unidade_id,situacao,email_institucional').order('nome_completo'));
+  const servidores = q(() => supabase.from('servidores').select('id,nome_completo,matricula,cargo_id,unidade_id,situacao,email_institucional,tipo_vinculo,exerce_comissao,elegivel_adicional').order('nome_completo'));
   const usuarios = q(() => supabase.from('usuarios').select('id,servidor_id,perfil,ativo'));
   const extras = q(() => supabase.from('usuario_modulos_extras').select('usuario_id,modulo_codigo'));
   const unExtras = q(() => supabase.from('usuario_unidades_extras').select('usuario_id,unidade_id'));
@@ -201,7 +201,7 @@ function Tela() {
       {geral && (
         <ImportarPlanilha aberto={importar} fechar={() => setImportar(false)} titulo="Importar servidores (planilha)" colunas={COLUNAS_SERVIDORES}
           rpcPrevia="importar_servidores_previa" rpcImportar="importar_servidores" nomeModelo="modelo-servidores.csv"
-          exemplo={['Nome Completo Exemplo', '000999', 'Auditor Fiscal', 'COFIT', '', '30', '0', '0']}
+          exemplo={['Nome Completo Exemplo', '000999', 'Auditor Fiscal', 'COFIT', '', '30', '0', '0', 'efetivo', 'não']}
           explicacao="Cadastra servidores novos com os saldos do RH. Matrícula obrigatória e única; cargo e unidade devem existir (sigla da unidade). Antes de gravar, o sistema mostra todos os erros e só importa se não houver nenhum. Alterar servidor já cadastrado continua passando por aprovação."
           aoImportar={recarregar} />
       )}
@@ -236,7 +236,9 @@ function DetalheServidor(p: {
       {erro && <Aviso tom="critico">{erro}</Aviso>}
       <div className="caixa-cinza">
         Matrícula <strong>{s.matricula}</strong> · {p.cargo} · {p.sigla(s.unidade_id)}<br />
-        {s.email_institucional ?? 'Sem e-mail institucional'} · {s.situacao === 'ativo' ? 'Ativo' : 'Inativo'}
+        {s.email_institucional ?? 'Sem e-mail institucional'} · {s.situacao === 'ativo' ? 'Ativo' : 'Inativo'}<br />
+        Vínculo: {s.tipo_vinculo ? ROTULO_VINCULO[s.tipo_vinculo] : <strong>não informado</strong>}{s.exerce_comissao ? ' · em cargo em comissão/função de confiança' : ''}
+        {' · '}{s.elegivel_adicional ? 'elegível ao adicional de produtividade' : 'não elegível ao adicional de produtividade'}
       </div>
       {p.podePedir && !proprio && (
         <button type="button" className="botao" onClick={() => p.pedir({
@@ -249,6 +251,8 @@ function DetalheServidor(p: {
             { chave: 'unidade_id', rotulo: 'Unidade', tipo: 'select', inicial: s.unidade_id, opcoes: p.opUnidades },
             { chave: 'email_institucional', rotulo: 'E-mail institucional', inicial: s.email_institucional ?? '', max: 254 },
             { chave: 'situacao', rotulo: 'Situação', tipo: 'select', inicial: s.situacao, opcoes: [{ valor: 'ativo', rotulo: 'Ativo' }, { valor: 'inativo', rotulo: 'Inativo' }] },
+            { chave: 'tipo_vinculo', rotulo: 'Tipo de vínculo', tipo: 'select', inicial: s.tipo_vinculo ?? '', opcoes: TIPOS_VINCULO.map((v) => ({ valor: v, rotulo: ROTULO_VINCULO[v] })) },
+            { chave: 'exerce_comissao', rotulo: 'Cargo em comissão/função de confiança', tipo: 'select', inicial: String(s.exerce_comissao), opcoes: [{ valor: 'false', rotulo: 'Não' }, { valor: 'true', rotulo: 'Sim' }] },
           ],
         })}>Solicitar alteração de dados</button>
       )}
@@ -315,7 +319,7 @@ function DetalheServidor(p: {
 function NovoServidor({ fechar, unidadeId, opUnidades, opCargos, aoSalvar }: {
   fechar: () => void; unidadeId: string; opUnidades: { valor: string; rotulo: string }[]; opCargos: { valor: string; rotulo: string }[]; aoSalvar: () => void;
 }) {
-  const [f, setF] = useState({ nome_completo: '', matricula: '', cargo_id: '', unidade_id: unidadeId, email_institucional: '' });
+  const [f, setF] = useState({ nome_completo: '', matricula: '', cargo_id: '', unidade_id: unidadeId, email_institucional: '', tipo_vinculo: '', exerce_comissao: false });
   const [erro, setErro] = useState<string | null>(null);
   const salvar = async () => {
     const r = servidorNovo.safeParse(f);
@@ -333,6 +337,10 @@ function NovoServidor({ fechar, unidadeId, opUnidades, opCargos, aoSalvar }: {
         <div className="form-linha">
           <Campo rotulo="Cargo"><select value={f.cargo_id} onChange={(e) => setF({ ...f, cargo_id: e.target.value })}><option value="">Selecione…</option>{opCargos.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}</select></Campo>
           <Campo rotulo="Unidade"><select value={f.unidade_id} onChange={(e) => setF({ ...f, unidade_id: e.target.value })}>{opUnidades.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}</select></Campo>
+        </div>
+        <div className="form-linha">
+          <Campo rotulo="Tipo de vínculo"><select value={f.tipo_vinculo} onChange={(e) => setF({ ...f, tipo_vinculo: e.target.value })}><option value="">Selecione…</option>{TIPOS_VINCULO.map((v) => <option key={v} value={v}>{ROTULO_VINCULO[v]}</option>)}</select></Campo>
+          <Campo rotulo="Cargo em comissão/função de confiança"><select value={String(f.exerce_comissao)} onChange={(e) => setF({ ...f, exerce_comissao: e.target.value === 'true' })}><option value="false">Não</option><option value="true">Sim</option></select></Campo>
         </div>
         <Campo rotulo="E-mail institucional" ajuda="Obrigatório só para quem terá login."><input type="email" maxLength={254} value={f.email_institucional} onChange={(e) => setF({ ...f, email_institucional: e.target.value })} /></Campo>
         <p className="nota">Cadastro novo não passa por aprovação. Alterações depois de salvo passam.</p>

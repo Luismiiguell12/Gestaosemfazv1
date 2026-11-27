@@ -50,6 +50,14 @@ Situação: **rascunho (Fases 1 a 4 e 6)**. Atualizar a cada fase. Nenhum dado r
 
 Os arquivos exportados são gerados no aparelho de quem pediu e não ficam guardados no sistema. Os relatórios trazem só o que o perfil já pode ver nas telas. O CPF do locador não entra em nenhum relatório.
 
+## Adendo 01 – Produtividade (parte já implementada)
+
+| Dado | Titular | Finalidade | Quem acessa | Onde |
+|---|---|---|---|---|
+| Tipo de vínculo, cargo em comissão/função de confiança, elegibilidade ao adicional | Servidor | Definir quem é avaliado para o Adicional de Desempenho e Produtividade | Mesmo acesso do cadastro do servidor (próprio, chefia do escopo, secretária, admin) | `servidores` |
+
+As avaliações de desempenho (Fase 5) serão **dado pessoal**: só o próprio servidor, a chefia que avalia, a revisora e a homologação de cada caso, a secretária e o administrador; agregados sem nome nos painéis (adendo, seção 8).
+
 ## Próximas fases (previsto pelo prompt)
 
 - Saldos de férias, licenças-prêmio, folgas e produtividade: **dados pessoais**, visíveis só ao próprio servidor, à chefia da unidade, à Secretária e ao Administrador.

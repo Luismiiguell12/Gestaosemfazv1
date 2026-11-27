@@ -21,8 +21,10 @@ describe('validação no cliente', () => {
     expect(matricula.safeParse('1'.repeat(21)).success).toBe(false);
   });
   it('servidor novo: e-mail opcional vira null', () => {
-    const r = servidorNovo.safeParse({ nome_completo: ' X ', matricula: '1', cargo_id: crypto.randomUUID(), unidade_id: crypto.randomUUID(), email_institucional: '' });
+    const base = { nome_completo: ' X ', matricula: '1', cargo_id: crypto.randomUUID(), unidade_id: crypto.randomUUID(), email_institucional: '', exerce_comissao: false };
+    const r = servidorNovo.safeParse({ ...base, tipo_vinculo: 'efetivo' });
     expect(r.success && r.data.email_institucional).toBe(null);
+    expect(servidorNovo.safeParse({ ...base, tipo_vinculo: '' }).success).toBe(false); // vínculo obrigatório (adendo 01)
   });
   it('login e feriado', () => {
     expect(login.safeParse({ email: 'nao-email', senha: 'x' }).success).toBe(false);
