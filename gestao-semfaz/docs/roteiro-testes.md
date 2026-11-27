@@ -166,12 +166,12 @@ Antes: informe o **tipo de vínculo** dos servidores de teste (pedido de altera�
 | 8.20 | SEC | Relatórios → Produtividade e Dossiê do ciclo (PDF/Excel) | Dossiê com ciência, recurso, homologação, retificação e encaminhamentos |
 | 8.21 | ⏱ | Avaliação "ciente" sem recurso após o prazo | Vai sozinha para "Aguardando homologação" |
 
-## 7. Encerramento
+## 9. Encerramento
 
 | # | Verificação | Esperado |
 |---|---|---|
-| 7.1 | Reativar usuários e desfazer testes que deixaram dados estranhos | Ambiente limpo para a próxima rodada |
-| 7.2 | Juntar todos os ❌ com prints e mandar de uma vez | Correções feitas em lote |
-| 7.3 | Indicar textos, nomes ou telas que queira mudar | Ajustes registrados |
+| 9.1 | Reativar usuários e desfazer testes que deixaram dados estranhos | Ambiente limpo para a próxima rodada |
+| 9.2 | Juntar todos os ❌ com prints e mandar de uma vez | Correções feitas em lote |
+| 9.3 | Indicar textos, nomes ou telas que queira mudar | Ajustes registrados |
 
 Itens que **não** estão neste roteiro porque dependem de definição: Produtividade (Fase 5 / Adendo 01), envio de avisos por e-mail e push, e o ambiente de produção (ver `docs/implantacao.md`).
