@@ -292,6 +292,25 @@ Acesso: `app.acesso_contratos()` (módulo contratos) para contratos e tudo ligad
 
 Relatórios: uma função `public.relatorio_*` por relatório, `security invoker` (a RLS das tabelas decide o que entra), mais a checagem `app.pode_relatorio(módulo)`. O navegador gera o arquivo (`src/lib/exportar.ts`: CSV próprio, XLSX montado com `fflate`, PDF com `pdf-lib`) depois de `registrar_exportacao`, que grava a auditoria, o histórico `exportacoes` e aplica o limite por hora. Catálogo dos relatórios (filtros e colunas): `src/lib/relatorios.ts`.
 
+### Fase 5 (Produtividade — Adendo 01)
+
+```mermaid
+erDiagram
+  prod_regras ||--o{ prod_competencias : "versão usada"
+  prod_competencias ||--o{ prod_avaliacoes : "uma por servidor elegível (ou por período)"
+  prod_avaliacoes ||--o{ prod_notas : "F1..F5"
+  prod_avaliacoes ||--o{ prod_provas : "registro, anexo ou referência"
+  prod_avaliacoes ||--o{ prod_recursos : ""
+  prod_avaliacoes ||--o{ prod_historico : "só cresce"
+  prod_avaliacoes ||--o| prod_avaliacoes : "retifica"
+  prod_competencias ||--o{ prod_encaminhamentos : "versões SEMAD"
+  prod_resultados_inst }o--|| prod_regras : ""
+  prod_metas }o--o{ prod_resultados_inst : "quadrimestre"
+  prod_arrecadacao }o--o{ prod_resultados_inst : "quadrimestre"
+```
+
+Estados (no banco): `rascunho → enviada → ciente → (em_recurso →) aguardando_homologacao → homologada (→ retificada)`. Segregação e imutabilidade por triggers (valem também para o Administrador e para escrita direta no banco). Cálculo todo em `numeric` no banco (`app.prod_apurar`, `app.prod_enquadrar`, `app.calcular_institucional`). Acesso por `app.pode_ver_avaliacao` (RLS, Storage e RPCs). A rotina diária passa a chamar `app.rotina_produtividade()` (sem recurso no prazo, alertas).
+
 `servidores` entra na Fase 1 só com o núcleo (necessário para usuários e para a regra da matrícula). Saldos, importação por planilha e folhas de ponto: Fase 2.
 
 ## 4. Perfis, escopo e módulos

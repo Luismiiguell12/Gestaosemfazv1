@@ -1,6 +1,6 @@
 # Gestão SEMFAZ — Dados pessoais tratados (rascunho para o encarregado/DPO)
 
-Situação: **rascunho (Fases 1 a 4 e 6)**. Atualizar a cada fase. Nenhum dado real antes da validação institucional.
+Situação: **rascunho (Fases 1 a 6)**. Atualizar a cada fase. Nenhum dado real antes da validação institucional.
 
 ## Fase 1
 
@@ -56,7 +56,18 @@ Os arquivos exportados são gerados no aparelho de quem pediu e não ficam guard
 |---|---|---|---|---|
 | Tipo de vínculo, cargo em comissão/função de confiança, elegibilidade ao adicional | Servidor | Definir quem é avaliado para o Adicional de Desempenho e Produtividade | Mesmo acesso do cadastro do servidor (próprio, chefia do escopo, secretária, admin) | `servidores` |
 
-As avaliações de desempenho (Fase 5) serão **dado pessoal**: só o próprio servidor, a chefia que avalia, a revisora e a homologação de cada caso, a secretária e o administrador; agregados sem nome nos painéis (adendo, seção 8).
+## Fase 5 – Produtividade
+
+| Dado | Titular | Finalidade | Quem acessa | Onde |
+|---|---|---|---|---|
+| Notas, justificativas, provas, limitações, ciência, recurso, decisão, homologação | Servidor avaliado | Adicional de Desempenho e Produtividade (decreto) | O próprio (depois de enviada), a chefia que avalia, o diretor (leitura da diretoria), a revisora (com recurso), a instância de homologação, Secretária/Admin | `prod_*`, bucket privado `produtividade` |
+| Demonstrativo (nota, percentual, dias elegíveis) e arquivo SEMAD | Servidor | Folha de pagamento (SEMAD) | Secretária/Admin, homologação; o próprio | `prod_apuracoes`, `prod_encaminhamentos` |
+| Vencimento básico (opcional, **desligado**) | Servidor | Cálculo em R$ só se a SEMFAZ decidir | Só Secretária/Admin | `prod_vencimentos` |
+| Datas de entrada/saída na SEMFAZ e chefia designada | Servidor | Dias elegíveis e quem avalia | Mesmo acesso do cadastro | `servidores` |
+
+Guarda **permanente** (adendo, seção 9): avaliações, provas, recursos, homologações, memórias de cálculo e encaminhamentos não são apagados; correção só por retificação. Painéis mostram só agregados por unidade, sem nome. **Pendente com o DPO:** confirmar a base legal e a guarda permanente.
+
+As avaliações de desempenho são **dado pessoal**: só o próprio servidor, a chefia que avalia, a revisora e a homologação de cada caso, a secretária e o administrador; agregados sem nome nos painéis (adendo, seção 8).
 
 ## Próximas fases (previsto pelo prompt)
 
