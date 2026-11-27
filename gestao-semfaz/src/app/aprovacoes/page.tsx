@@ -32,10 +32,12 @@ function Central() {
   const pendentes = useConsulta(async () => supabase.rpc('listar_solicitacoes', { p_aba: 'pendentes' }), [lista.dados]);
   const unidades = useConsulta(async () => supabase.from('unidades').select('id,sigla'), []);
   const cargos = useConsulta(async () => supabase.from('cargos').select('id,nome'), []);
+  const servidores = useConsulta(async () => supabase.from('servidores').select('id,nome_completo'), []);
   const nomes = useMemo(() => ({
+    servidores: new Map(((servidores.dados as { id: string; nome_completo: string }[] | null) ?? []).map((c) => [c.id, c.nome_completo])),
     unidades: new Map(((unidades.dados as { id: string; sigla: string }[] | null) ?? []).map((u) => [u.id, u.sigla])),
     cargos: new Map(((cargos.dados as { id: string; nome: string }[] | null) ?? []).map((c) => [c.id, c.nome])),
-  }), [unidades.dados, cargos.dados]);
+  }), [unidades.dados, cargos.dados, servidores.dados]);
 
   const itens = (lista.dados as Solicitacao[] | null) ?? [];
   const selecionadoId = params.get('id') ?? itens[0]?.id;

@@ -11,7 +11,7 @@ import { justificativa as justSchema, primeiroErro } from '@/lib/validacao';
 export interface CampoForm {
   chave: string;
   rotulo: string;
-  tipo?: 'texto' | 'data' | 'select';
+  tipo?: 'texto' | 'data' | 'select' | 'numero';
   opcoes?: { valor: string; rotulo: string }[];
   inicial?: string;
   max?: number;
@@ -22,6 +22,7 @@ export function SolicitarDialogo({ aberto, fechar, titulo, tipo, alvoId, campos,
   aberto: boolean; fechar: () => void; titulo: string; tipo: TipoSolicitacao; alvoId: string | null;
   campos: CampoForm[]; aviso?: string; aoEnviar?: () => void;
 }) {
+  const contrato = tipo === 'contrato_alterar' || tipo === 'contrato_aditivo';
   const { info } = useSessao();
   const [valores, setValores] = useState<Record<string, string>>({});
   const [just, setJust] = useState('');
@@ -59,7 +60,9 @@ export function SolicitarDialogo({ aberto, fechar, titulo, tipo, alvoId, campos,
       const up = await supabase.storage.from('anexos').upload(anexo, arquivo, { contentType: MIME[v.tipo], upsert: false });
       if (up.error) { setErro('Não foi possível enviar o anexo.'); setEnviando(false); return; }
     }
-    const { error } = await supabase.rpc('solicitar', { p_tipo: tipo, p_alvo_id: alvoId, p_dados: dados, p_justificativa: j.data, p_anexo_path: anexo });
+    const { error } = contrato
+      ? await supabase.rpc('solicitar_contrato', { p_tipo: tipo, p_contrato: alvoId, p_dados: dados, p_justificativa: j.data, p_anexo_path: anexo })
+      : await supabase.rpc('solicitar', { p_tipo: tipo, p_alvo_id: alvoId, p_dados: dados, p_justificativa: j.data, p_anexo_path: anexo });
     setEnviando(false);
     if (error) { setErro(mensagemErro(error)); return; }
     setOk(true);
@@ -82,7 +85,7 @@ export function SolicitarDialogo({ aberto, fechar, titulo, tipo, alvoId, campos,
                   {c.opcoes?.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
                 </select>
               ) : (
-                <input type={c.tipo === 'data' ? 'date' : 'text'} maxLength={c.max ?? 200} value={valores[c.chave] ?? ''} onChange={(e) => setValores({ ...valores, [c.chave]: e.target.value })} />
+                <input type={c.tipo === 'data' ? 'date' : 'text'} inputMode={c.tipo === 'numero' ? 'decimal' : undefined} maxLength={c.max ?? 200} value={valores[c.chave] ?? ''} onChange={(e) => setValores({ ...valores, [c.chave]: e.target.value })} />
               )}
             </Campo>
           ))}
