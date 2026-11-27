@@ -196,6 +196,10 @@ Mapa dos testes obrigatórios: T1–T2 formulário; T3–T4 institucional 25,65 
 
 **Não executado:** Supabase real; envio real de arquivos ao bucket `produtividade`; rotina diária no pg_cron real.
 
+## Carga de demonstração (27/11/2026)
+
+`supabase/demo/dados-demonstracao.sql` aplicado no Supabase **de testes** a pedido do responsável, para visualização. Tudo fictício: 10 servidores extras (23 no total, todos com vínculo), 7 afastamentos, 19 demandas (3 de renovação criadas pela rotina), conversa e checklist, compromissos, 6 contratos com aluguéis/UCs/faturas (alguns vencidos), entregas de folhas, 2 pedidos de aprovação e um ciclo de produtividade do mês passado com 20 avaliações em todas as situações (resultado institucional homologado de 25,65). Designações de teste: administrador = autoridade revisora e instância de homologação. **Nunca rodar em produção.** Verificação de segurança depois da carga: 0 FALHA.
+
 ## Pendências da Fase 5
 
 - ~~Aplicar a Fase 5 no Supabase de testes e republicar~~ **Feito em 27/11/2026** (PR #17). Verificação no banco real: 0 FALHA; bucket `produtividade` privado; rotina diária executada sem erro.
