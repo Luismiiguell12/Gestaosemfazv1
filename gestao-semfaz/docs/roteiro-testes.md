@@ -138,40 +138,40 @@ Nos itens abaixo: **ADM** = administrador, **SEC** = secretária, **DIR** = dire
 | 6.7 | DIR | "Demandas por unidade" | Só unidades da DAT |
 | 6.8 | SEC | Relatórios → Auditoria filtrando "Exportações" | Cada exportação registrada (quem, formato, filtros) |
 
-## 8. Produtividade — Adendo 01 (Fase 5)
+## 7. Produtividade — Adendo 01 (Fase 5)
 
 Antes: informe o **tipo de vínculo** dos servidores de teste (pedido de alteração → aprovação); só efetivos entram. Em Produtividade › Configuração, designe a **autoridade revisora** (ex.: DIR) e a **instância de homologação** (ex.: ADM).
 
 | # | Perfil | Passos | Esperado |
 |---|---|---|---|
-| 8.1 | SEC | Produtividade → competência do mês passado → "Abrir" | Uma avaliação por servidor elegível, com a chefia imediata (FUN → COO; COO → DIR; DIR → SEC) |
-| 8.2 | SEC | Conferir que comissionado/temporário não aparecem | Fora do ciclo |
-| 8.3 | COO | Abrir a avaliação do FUN; nota 25 em F1 | Recusa (máximo 20) |
-| 8.4 | COO | Preencher notas e justificativas sem provas; "Enviar ao servidor" | Recusa e lista o que falta |
-| 8.5 | COO | No painel de subsídios, "usar" uma demanda como prova; adicionar referência externa e um anexo | Provas aparecem no indicador; o sistema não sugere nota |
-| 8.6 | COO | Marcar "critério equivalente" em F4 sem justificar | Não envia até justificar |
-| 8.7 | COO | Enviar | FUN recebe aviso |
-| 8.8 | FUN | Painel → "Minha produtividade" → Dar ciência | Prazo de recurso (5 dias úteis) aparece |
-| 8.9 | FUN | Recorrer com razões | Vai para a revisora; DIR recebe aviso |
-| 8.10 | DIR | Decidir o recurso sem fundamentação / alterando nota sem justificativa | Recusa; com fundamentação, registra e vai para homologação |
-| 8.11 | COO | Tentar homologar a avaliação que fez (se estiver designado) | Recusa (segregação) |
-| 8.12 | ADM | Homologação → marcar e homologar em lote; devolver uma com motivo | Homologadas ficam travadas; a devolvida volta a rascunho com o motivo |
-| 8.13 | ADM | Abrir uma homologada e tentar editar | Não há edição; só "Retificar" (SEC/ADM) |
-| 8.14 | SEC | Retificar com justificativa | Original preservado; nova avaliação em rascunho ligada |
-| 8.15 | SEC | Encaminhamento SEMAD → gerar; baixar Excel, CSV e Anexo II (PDF) | Arquivos com nota, %, fator e percentual efetivo; versão registrada |
-| 8.16 | SEC | Institucional: lançar metas de um quadrimestre **futuro**; tentar alterar meta do quadrimestre atual | Futuro: aceita; atual: só retificação (não vale para o ciclo) |
-| 8.17 | SEC | Lançar/importar arrecadação de um quadrimestre encerrado e "Apurar" | Memória de cálculo por receita; índice nunca passa de 1; pontos ≤ 30 |
-| 8.18 | ADM | Homologar o resultado institucional (não pode ser quem apurou) | Próximas competências usam esse resultado; antes disso, "regra de transição" |
-| 8.19 | FUN | Tentar abrir a avaliação de outro servidor pelo endereço | Acesso não permitido |
-| 8.20 | SEC | Relatórios → Produtividade e Dossiê do ciclo (PDF/Excel) | Dossiê com ciência, recurso, homologação, retificação e encaminhamentos |
-| 8.21 | ⏱ | Avaliação "ciente" sem recurso após o prazo | Vai sozinha para "Aguardando homologação" |
+| 7.1 | SEC | Produtividade → competência do mês passado → "Abrir" | Uma avaliação por servidor elegível, com a chefia imediata (FUN → COO; COO → DIR; DIR → SEC) |
+| 7.2 | SEC | Conferir que comissionado/temporário não aparecem | Fora do ciclo |
+| 7.3 | COO | Abrir a avaliação do FUN; nota 25 em F1 | Recusa (máximo 20) |
+| 7.4 | COO | Preencher notas e justificativas sem provas; "Enviar ao servidor" | Recusa e lista o que falta |
+| 7.5 | COO | No painel de subsídios, "usar" uma demanda como prova; adicionar referência externa e um anexo | Provas aparecem no indicador; o sistema não sugere nota |
+| 7.6 | COO | Marcar "critério equivalente" em F4 sem justificar | Não envia até justificar |
+| 7.7 | COO | Enviar | FUN recebe aviso |
+| 7.8 | FUN | Painel → "Minha produtividade" → Dar ciência | Prazo de recurso (5 dias úteis) aparece |
+| 7.9 | FUN | Recorrer com razões | Vai para a revisora; DIR recebe aviso |
+| 7.10 | DIR | Decidir o recurso sem fundamentação / alterando nota sem justificativa | Recusa; com fundamentação, registra e vai para homologação |
+| 7.11 | COO | Tentar homologar a avaliação que fez (se estiver designado) | Recusa (segregação) |
+| 7.12 | ADM | Homologação → marcar e homologar em lote; devolver uma com motivo | Homologadas ficam travadas; a devolvida volta a rascunho com o motivo |
+| 7.13 | ADM | Abrir uma homologada e tentar editar | Não há edição; só "Retificar" (SEC/ADM) |
+| 7.14 | SEC | Retificar com justificativa | Original preservado; nova avaliação em rascunho ligada |
+| 7.15 | SEC | Encaminhamento SEMAD → gerar; baixar Excel, CSV e Anexo II (PDF) | Arquivos com nota, %, fator e percentual efetivo; versão registrada |
+| 7.16 | SEC | Institucional: lançar metas de um quadrimestre **futuro**; tentar alterar meta do quadrimestre atual | Futuro: aceita; atual: só retificação (não vale para o ciclo) |
+| 7.17 | SEC | Lançar/importar arrecadação de um quadrimestre encerrado e "Apurar" | Memória de cálculo por receita; índice nunca passa de 1; pontos ≤ 30 |
+| 7.18 | ADM | Homologar o resultado institucional (não pode ser quem apurou) | Próximas competências usam esse resultado; antes disso, "regra de transição" |
+| 7.19 | FUN | Tentar abrir a avaliação de outro servidor pelo endereço | Acesso não permitido |
+| 7.20 | SEC | Relatórios → Produtividade e Dossiê do ciclo (PDF/Excel) | Dossiê com ciência, recurso, homologação, retificação e encaminhamentos |
+| 7.21 | ⏱ | Avaliação "ciente" sem recurso após o prazo | Vai sozinha para "Aguardando homologação" |
 
-## 9. Encerramento
+## 8. Encerramento
 
 | # | Verificação | Esperado |
 |---|---|---|
-| 9.1 | Reativar usuários e desfazer testes que deixaram dados estranhos | Ambiente limpo para a próxima rodada |
-| 9.2 | Juntar todos os ❌ com prints e mandar de uma vez | Correções feitas em lote |
-| 9.3 | Indicar textos, nomes ou telas que queira mudar | Ajustes registrados |
+| 8.1 | Reativar usuários e desfazer testes que deixaram dados estranhos | Ambiente limpo para a próxima rodada |
+| 8.2 | Juntar todos os ❌ com prints e mandar de uma vez | Correções feitas em lote |
+| 8.3 | Indicar textos, nomes ou telas que queira mudar | Ajustes registrados |
 
 Itens que **não** estão neste roteiro porque dependem de definição: Produtividade (Fase 5 / Adendo 01), envio de avisos por e-mail e push, e o ambiente de produção (ver `docs/implantacao.md`).

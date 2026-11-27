@@ -4,7 +4,7 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 
 ## Fase atual
 
-**Fase 5 — Produtividade (Adendo 01)**: implementada em 27/11/2026, aguardando validação; **não aplicada no Supabase de testes**. Fase 7 (parte técnica) concluída antes. Próximo: roteiro geral de testes com o responsável (`docs/roteiro-testes.md`, inclui a seção 8 de produtividade). **Sistema não liberado para dados reais.**
+**Fase 5 — Produtividade (Adendo 01)**: implementada em 27/11/2026, aguardando validação; **não aplicada no Supabase de testes**. Fase 7 (parte técnica) concluída antes. Próximo: roteiro geral de testes com o responsável (`docs/roteiro-testes.md`, inclui a seção 7 de produtividade). **Sistema não liberado para dados reais.**
 
 | Fase | Situação |
 |---|---|
