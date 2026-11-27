@@ -104,7 +104,7 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 
 Arquivo: `docs/ADENDO-PRODUTIVIDADE.md`. Transforma o módulo de Produtividade na **avaliação mensal de desempenho** do decreto: avaliação pela chefia imediata (5 indicadores, até 70 pontos, com justificativa e prova obrigatórias), desempenho institucional quadrimestral por arrecadação (até 30 pontos), nota, mínimos, faixas e proporcionalidade, ciência, recurso, revisão, homologação com segregação de funções, encaminhamento à SEMAD (Anexos I e II) e dossiê para o Controle Interno.
 
-**Já feito (sem interromper a fase atual):** campos da seção 2 no cadastro (D55–D57). Testes: `tests/db/adendo.test.ts`.
+**Já feito (sem interromper a fase atual):** campos da seção 2 no cadastro (D55–D57). Testes: `tests/db/adendo.test.ts`. Aplicado no Supabase de testes e publicado em 27/11/2026 (PR #16); os 13 servidores de teste estão sem vínculo informado (não elegíveis) até alguém preencher.
 
 **Fica para a Fase 5 (implementação completa do adendo, seção 12):**
 - Tabela de regras versionada (indicadores, máximos, pesos, mínimos, faixas, transição, prazos) e cada ciclo gravando a versão usada.
