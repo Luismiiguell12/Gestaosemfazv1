@@ -256,6 +256,12 @@ create policy prod_enc_ler on public.prod_encaminhamentos for select to authenti
 create policy prod_corr_ler on public.prod_correcoes for select to authenticated using (
   (select app.gestor_geral()) or exists (select 1 from public.prod_avaliacoes a where a.id = prod_correcoes.avaliacao_id and app.pode_ver_avaliacao(a.id)));
 
+-- uuid do caminho sem erro de conversão (SQL não garante a ordem do AND)
+create or replace function app.uuid_seguro(t text)
+returns uuid language sql immutable set search_path = ''
+as $$ select case when t ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then t::uuid end $$;
+grant execute on function app.uuid_seguro(text) to authenticated;
+
 -- arquivos (provas, ciência por outro meio, recurso, metas/arrecadação): bucket privado
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('produtividade', 'produtividade', false, 20971520, array['application/pdf', 'image/png', 'image/jpeg',
@@ -263,11 +269,11 @@ values ('produtividade', 'produtividade', false, 20971520, array['application/pd
 on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 create policy produtividade_enviar on storage.objects for insert to authenticated with check (
   bucket_id = 'produtividade' and (
-    (name ~ '^avaliacoes/[0-9a-f-]{36}/[0-9a-f-]{36}\.(pdf|png|jpg|docx|xlsx)$' and (select app.pode_ver_avaliacao(split_part(name, '/', 2)::uuid)))
+    (name ~ '^avaliacoes/[0-9a-f-]{36}/[0-9a-f-]{36}\.(pdf|png|jpg|docx|xlsx)$' and coalesce((select app.pode_ver_avaliacao(app.uuid_seguro(split_part(name, '/', 2)))), false))
     or (name ~ '^institucional/[0-9a-f-]{36}\.(pdf|png|jpg|docx|xlsx)$' and (select app.gere_institucional()))));
 create policy produtividade_ler on storage.objects for select to authenticated using (
   bucket_id = 'produtividade' and (
-    (name like 'avaliacoes/%' and (select app.pode_ver_avaliacao(split_part(name, '/', 2)::uuid)))
+    (name like 'avaliacoes/%' and coalesce((select app.pode_ver_avaliacao(app.uuid_seguro(split_part(name, '/', 2)))), false))
     or (name like 'institucional/%' and (select app.sessao_ok()) and ((select app.tem_modulo('produtividade')) or (select app.gere_institucional())))));
 
 create or replace function app.prod_hist(p_av uuid, p_acao text, p_det jsonb default '{}'::jsonb)
@@ -363,8 +369,9 @@ returns jsonb language plpgsql stable security definer set search_path = ''
 as $$
 declare v jsonb; s record;
 begin
-  if not (app.gestor_geral() or p_servidor = app.servidor_atual() and app.sessao_ok()
-          or exists (select 1 from public.prod_avaliacoes a where a.competencia = p_comp and a.servidor_id = p_servidor and app.pode_ver_avaliacao(a.id))) then
+  -- coalesce: servidor nulo/inexistente nunca libera (NULL não pode virar "permitido")
+  if p_servidor is null or not coalesce(app.gestor_geral() or (p_servidor = app.servidor_atual() and app.sessao_ok())
+          or exists (select 1 from public.prod_avaliacoes a where a.competencia = p_comp and a.servidor_id = p_servidor and app.pode_ver_avaliacao(a.id)), false) then
     perform app.erro('Acesso não permitido.', '42501');
   end if;
   if p_servidor = app.servidor_atual() and not app.gestor_geral()
