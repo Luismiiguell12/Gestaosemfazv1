@@ -49,7 +49,7 @@ const usuarios = [{ id: 'u1', servidor_id: 's1', perfil: 'coordenador', ativo: t
 const M = (codigo, nome, rota, icone, ordem, status) => ({ codigo, nome, rota, icone, ordem, status, no_menu: true });
 const modulos = [
   M('painel', 'Painel', '/', 'painel', 10, 'ativo'), M('demandas', 'Demandas', '/demandas', 'demandas', 20, 'ativo'), M('calendario', 'Calendário', '/calendario', 'calendario', 30, 'ativo'),
-  M('contratos', 'Contratos de locação', '/contratos', 'contratos', 40, 'em_breve'), M('unidades_consumidoras', 'Unidades consumidoras', '/unidades-consumidoras', 'energia', 50, 'em_breve'),
+  M('contratos', 'Contratos de locação', '/contratos', 'contratos', 40, 'ativo'), M('unidades_consumidoras', 'Unidades consumidoras', '/unidades-consumidoras', 'energia', 50, 'ativo'),
   M('ferias', 'Férias e folgas', '/ferias', 'ferias', 60, 'ativo'), M('folhas_ponto', 'Folhas de ponto', '/folhas-ponto', 'relogio', 70, 'ativo'),
   M('produtividade', 'Produtividade', '/produtividade', 'grafico', 80, 'em_definicao'), M('aprovacoes', 'Aprovações', '/aprovacoes', 'aprovacoes', 90, 'ativo'),
   M('relatorios', 'Relatórios', '/relatorios', 'relatorios', 100, 'ativo'), M('usuarios', 'Unidades e usuários', '/usuarios', 'usuarios', 110, 'ativo'),
@@ -102,6 +102,27 @@ async function simularApi(page, perfil, aal) {
       { tipo: 'demanda', id: 'd2', titulo: '#102 Relatório de fiscalização', inicio: `${hoje}T00:00:00Z`, fim: `${hoje}T00:00:00Z`, dia_inteiro: true, unidade_id: 'cofit', unidade: 'COFIT', local: null, descricao: null, participantes: [], editavel: false }]);
     if (p.endsWith('/rpc/painel_unidades')) return json(unidades.map((u, i) => ({ unidade_id: u.id, a_fazer: 2, em_andamento: 3, concluidas: 4, atrasadas: i % 4 === 1 ? 2 : 0, apertadas: i % 4 === 2 ? 1 : 0, concluidas_90: 10, no_prazo_90: 8 })));
     if (p.endsWith('/rpc/meus_indicadores')) return json({ abertas: 4, atrasadas: 1, concluidas_mes: 7, no_prazo_pct: 86, por_mes: ['2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11'].map((mes, i) => ({ mes, concluidas: [5, 6, 4, 8, 6, 7][i] })) });
+    if (p.endsWith('/rpc/painel_contratos')) return json({ vencendo: 3, vencendo_30: 1, vencidos: 0, alugueis_pendentes: 2, alugueis_pendentes_valor: 7480, proximos: [{ id: 'ct1', numero: '014/2024', imovel_descricao: 'Imóvel da COAC', fim_vigencia: '2026-12-14', dias: 18 }] });
+    if (p.endsWith('/rpc/listar_contratos')) return json([
+      { id: 'ct1', numero: '014/2024', locador: 'Locador Exemplo 1', imovel: 'Imóvel da COAC', unidade: 'COFIT', fim_vigencia: '2026-12-14', dias_restantes: 18, valor_mensal: 3740, fiscal: 'Servidor A', encerrado: false, alugueis_atrasados: 1, aditivos: 1 },
+      { id: 'ct2', numero: '022/2024', locador: 'Imobiliária Exemplo', imovel: 'Arquivo central', unidade: null, fim_vigencia: '2027-08-31', dias_restantes: 278, valor_mensal: 5200, fiscal: null, encerrado: false, alugueis_atrasados: 0, aditivos: 0 },
+    ]);
+    if (p.endsWith('/rpc/contrato_ficha')) return json({
+      contrato: { id: 'ct1', numero: '014/2024', processo: '0000/2024', imovel_descricao: 'Imóvel da COAC', imovel_endereco: 'Rua Exemplo, 100 – Centro', unidade_ocupante_id: 'cofit', unidade: 'COFIT', inicio: '2024-12-15', fim_original: '2025-12-14', fim_vigencia: '2026-12-14', valor_mensal: 3740, valor_anual: 44880, dia_vencimento: 10, fiscal_servidor_id: 's2', fiscal: 'Servidor A', indice_reajuste: 'IPCA', mes_database: 12, encerrado: false, dias_restantes: 18 },
+      locador: { id: 'l1', tipo: 'PF', nome: 'Locador Exemplo 1', documento: '***.982.247-**', email: 'lo***@exemplo.com', telefone: '(79) *****-1234', mascarado: true, pode_ver_completo: false },
+      aditivos: [{ id: 'ad1', numero: 1, altera_prazo: true, altera_valor: true, novo_fim: '2026-12-14', novo_valor: 3740, data_assinatura: '2025-12-12', descricao: null }],
+      alugueis: [['2026-09-01', '2026-09-08', 'pago'], ['2026-10-01', '2026-10-05', 'pago'], ['2026-11-01', null, 'atrasado'], ['2026-12-01', null, 'pendente']].map(([c, pg, s], i) => ({ id: `al${i}`, competencia: c, valor: 3740, vencimento: c.slice(0, 8) + '10', pago_em: pg, valor_pago: pg ? 3740 : null, situacao: s })),
+      ucs: [{ id: 'uc1', fornecedor: 'energisa', numero: '0000001', descricao: null, ultima: { competencia: '2026-10-01', valor: 389.2, pago_em: '2026-11-18', vencimento: '2026-11-20' } }, { id: 'uc2', fornecedor: 'igua', numero: '000002', descricao: null, ultima: { competencia: '2026-10-01', valor: 142.7, pago_em: null, vencimento: '2026-12-30' } }],
+      documentos: [{ id: 'doc1', nome: 'Contrato_014-2024.pdf', path: 'contratos/ct1/x.pdf', tamanho: 1000, aditivo_id: null, enviado_em: '2024-12-15T12:00:00Z', enviado_por: 'Servidor C' }],
+      historico: [{ em: '2026-11-05T12:00:00Z', acao: 'pagamento', detalhes: { competencia: '10/2026', valor: 3740 }, ator: 'Servidor C' }, { em: '2025-12-12T12:00:00Z', acao: 'aditivo', detalhes: { numero: 1 }, ator: 'Administrador do sistema' }, { em: '2024-12-15T12:00:00Z', acao: 'importado', detalhes: {}, ator: 'Servidor C' }],
+      renovacao: { demanda_id: 'd2', numero: 150, status: 'a_fazer' }, pendentes: 0,
+    });
+    if (p.endsWith('/rpc/ucs_competencia')) return json([
+      { uc_id: 'uc1', fornecedor: 'energisa', numero: '0000001', descricao: null, contrato_id: 'ct1', contrato_numero: '014/2024', imovel: 'Imóvel da COAC', fatura_id: 'f1', consumo: 412, valor: 389.2, vencimento: '2026-11-20', pago_em: '2026-11-18', situacao: 'paga' },
+      { uc_id: 'uc2', fornecedor: 'igua', numero: '000002', descricao: null, contrato_id: 'ct1', contrato_numero: '014/2024', imovel: 'Imóvel da COAC', fatura_id: 'f2', consumo: 18, valor: 142.7, vencimento: '2026-12-30', pago_em: null, situacao: 'pendente' },
+      { uc_id: 'uc3', fornecedor: 'cercos', numero: '0000031', descricao: null, contrato_id: 'ct2', contrato_numero: '022/2024', imovel: 'Arquivo central', fatura_id: 'f3', consumo: 210, valor: 196.5, vencimento: '2026-11-12', pago_em: null, situacao: 'atrasada' },
+      { uc_id: 'uc4', fornecedor: 'energisa', numero: '0000011', descricao: null, contrato_id: 'ct2', contrato_numero: '022/2024', imovel: 'Arquivo central', fatura_id: null, consumo: null, valor: null, vencimento: null, pago_em: null, situacao: 'sem_lancamento' },
+    ]);
     if (p.endsWith('/rpc/busca_geral')) return json([{ tipo: 'unidade', id: 'cofit', titulo: 'COFIT', subtitulo: 'Coordenadoria de Fiscalização e Tributos', rota: '/usuarios?unidade=cofit' }]);
     const t = p.split('/').pop();
     const ano = new Date().getFullYear();
@@ -126,13 +147,15 @@ const browser = await chromium.launch();
 const passos = [];
 // cada passo tenta 2x (CI às vezes é lento); a 1ª falha aparece no log como "instável"
 async function passo(nome, fn) {
+  if (process.env.E2E_SO && !nome.includes(process.env.E2E_SO)) return;
+  if (process.env.E2E_VERBOSE) console.log('> ' + nome);
   let primeira = null;
   for (let tentativa = 1; tentativa <= 2; tentativa++) {
     try {
       await fn();
       passos.push(['ok', nome, primeira ? `instável: passou na 2ª tentativa (1ª: ${primeira})` : '']);
       return;
-    } catch (e) { primeira ??= e.message.split('\n')[0]; }
+    } catch (e) { primeira ??= e.message.split('\n')[0]; if (process.env.E2E_VERBOSE) console.log(e.message.split('\n').slice(0, 4).join(' | ')); }
   }
   passos.push(['FALHOU', nome, primeira]);
 }
@@ -177,7 +200,9 @@ await passo('painel da secretária (desktop) segue o protótipo', async () => {
   await page.goto(`${BASE}/`);
   await page.getByRole('heading', { name: 'Como estão as unidades' }).waitFor();
   for (const t of ['Aguardando sua aprovação', 'Contratos perto do vencimento', 'Próximos compromissos', 'Ausências neste mês', 'Ligadas ao Gabinete', 'DAT · Administração Tributária']) await page.getByText(t, { exact: true }).first().waitFor();
-  assert.equal(await page.locator('nav[aria-label="Menu principal"] [aria-disabled="true"]').count(), 4);
+  assert.equal(await page.locator('nav[aria-label="Menu principal"] [aria-disabled="true"]').count(), 2);
+  await page.getByText('1 em menos de 30 dias').waitFor();
+  await page.getByText('Contrato 014/2024').first().waitFor();
   await page.getByText('Com atraso', { exact: true }).first().waitFor();
   await page.getByText('Reunião de planejamento').first().waitFor();
   await page.getByText('Folhas de ponto a devolver').waitFor();
@@ -287,6 +312,49 @@ await passo('calendário: mês, abas e detalhe do compromisso', async () => {
   await page.screenshot({ path: `${SHOTS}/calendario.png`, fullPage: true });
   await page.goto(`${BASE}/calendario/feriados/`);
   await page.getByText('Natal').waitFor();
+});
+
+await passo('contratos: lista com filtros, ficha conforme protótipo, dados do locador mascarados', async () => {
+  const page = await novaPagina({ perfil: 'secretaria' });
+  await page.goto(`${BASE}/contratos/`);
+  await page.getByRole('cell', { name: /014\/2024/ }).waitFor();
+  await page.getByText('1 aluguel(is) vencido(s)').waitFor();
+  await page.getByRole('tab', { name: 'Vencendo em 90 dias' }).click();
+  assert.equal(await page.getByRole('cell', { name: /022\/2024/ }).count(), 0);
+  await page.getByRole('button', { name: 'Novo contrato' }).click();
+  await page.getByRole('dialog').getByText('Número do contrato').waitFor();
+  await page.getByRole('button', { name: 'Cancelar' }).click();
+  await page.goto(`${BASE}/contratos/ficha/?id=ct1`);
+  await page.getByRole('heading', { name: 'Contrato 014/2024 · Imóvel da COAC' }).waitFor();
+  for (const t of ['Vigente', 'Vence em 18 dia(s) (14/12/2026)', '1 aditivo(s)', 'R$ 44.880,00', 'Aluguéis mês a mês', 'Unidades consumidoras', 'Documentos', 'Histórico', 'Contrato_014-2024.pdf']) await page.getByText(t, { exact: true }).first().waitFor();
+  await page.getByText(/1º aditivo \(prazo e valor\)/).waitFor();
+  await page.getByText('Vencido', { exact: true }).first().waitFor();
+  await page.getByText('demanda #150').waitFor();
+  await page.screenshot({ path: `${SHOTS}/contrato-ficha.png`, fullPage: true });
+  await page.getByRole('button', { name: 'dados' }).click();
+  await page.getByText('***.982.247-**').waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Exibir dados completos' }).count(), 0);
+  await page.getByRole('button', { name: 'Fechar' }).click();
+  await page.getByRole('button', { name: 'Solicitar alteração' }).click();
+  await page.getByRole('button', { name: 'Enviar para aprovação' }).waitFor();
+  await page.getByRole('button', { name: 'Cancelar' }).click();
+  await page.getByRole('button', { name: 'Registrar pagamento' }).click();
+  await page.getByRole('dialog').getByText('Data do pagamento').waitFor();
+  assert.match(await page.getByRole('dialog').locator('select option').first().textContent(), /nov\/2026 · vence 10\/11\/2026 · vencido/);
+});
+
+await passo('unidades consumidoras: KPIs, abas por fornecedor e situação', async () => {
+  const page = await novaPagina({ perfil: 'secretaria' });
+  await page.goto(`${BASE}/unidades-consumidoras/`);
+  await page.getByRole('heading', { name: 'Unidades consumidoras e faturas' }).waitFor();
+  for (const t of ['Energia no mês', 'Água no mês', 'Faturas pendentes', 'Faturas vencidas', 'R$ 585,70', 'R$ 142,70']) await page.getByText(t, { exact: true }).first().waitFor();
+  await page.getByText('Sem lançamento').waitFor();
+  await page.getByRole('button', { name: 'Lançar' }).waitFor();
+  await page.screenshot({ path: `${SHOTS}/unidades-consumidoras.png`, fullPage: true });
+  await page.getByRole('tab', { name: 'Iguá' }).click();
+  assert.equal(await page.locator('tbody tr').count(), 1);
+  await page.getByRole('button', { name: 'Importar faturas do mês' }).click();
+  await page.getByText('Colunas provisórias', { exact: false }).waitFor();
 });
 
 await passo('painel do funcionário: menu reduzido', async () => {

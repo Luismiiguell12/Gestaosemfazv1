@@ -1,6 +1,6 @@
 # Gestão SEMFAZ — Dados pessoais tratados (rascunho para o encarregado/DPO)
 
-Situação: **rascunho da Fase 1**. Atualizar a cada fase. Nenhum dado real antes da validação institucional.
+Situação: **rascunho (Fases 1 a 4)**. Atualizar a cada fase. Nenhum dado real antes da validação institucional.
 
 ## Fase 1
 
@@ -33,11 +33,19 @@ Situação: **rascunho da Fase 1**. Atualizar a cada fase. Nenhum dado real ante
 | Anexos de demandas | — | Instrução da demanda | Mesmo acesso da demanda | bucket privado `demandas` |
 | Compromissos e participantes | Servidor | Agenda | Chefia do calendário e participantes | `compromissos` |
 
+## Fase 4
+
+| Dado | Titular | Finalidade | Quem acessa | Onde |
+|---|---|---|---|---|
+| Nome do locador | Locador PF | Identificar o contrato | Quem tem o módulo contratos | `locadores` |
+| CPF, e-mail e telefone do locador | Locador PF | Execução do contrato e contato | **Mascarados** para quem tem o módulo contratos; completos só com a permissão `locadores_dados` (cada exibição é auditada) | `locadores` (colunas sem acesso pela API) |
+| PDFs do contrato e aditivos | Locador | Instrução do contrato | Quem tem o módulo contratos | bucket privado `contratos` |
+| Fiscal do contrato | Servidor | Responsável pela fiscalização e pela renovação | Quem tem o módulo contratos | `contratos` |
+
 ## Próximas fases (previsto pelo prompt)
 
 - Saldos de férias, licenças-prêmio, folgas e produtividade: **dados pessoais**, visíveis só ao próprio servidor, à chefia da unidade, à Secretária e ao Administrador.
 - Folhas de ponto: visíveis só a quem tem permissão sobre a unidade.
-- Locadores (CPF e contato): mascarados por padrão; exibição completa só com permissão específica.
 
 ## Medidas
 

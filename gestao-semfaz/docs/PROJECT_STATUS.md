@@ -4,14 +4,14 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 
 ## Fase atual
 
-**Fase 3 — Demandas, calendário e painéis**: implementada, aguardando validação. A pedido do responsável, as Fases 1 e 2 serão testadas e corrigidas depois (26/11/2026).
+**Fase 4 — Contratos, unidades consumidoras, faturas e aluguéis**: implementada, aguardando validação. A pedido do responsável, as Fases 1 a 3 serão testadas e corrigidas depois, com um roteiro geral de testes (26/11/2026).
 
 | Fase | Situação |
 |---|---|
 | 1. Fundação | Concluída e publicada (testes do responsável pendentes) |
 | 2. Servidores, férias, folhas de ponto | Concluída e publicada (testes do responsável pendentes) |
-| 3. Demandas, calendário, painéis | Concluída (aguardando validação) |
-| 4. Contratos, UCs, faturas, aluguéis | Não iniciada |
+| 3. Demandas, calendário, painéis | Concluída (aguardando validação; não aplicada no Supabase) |
+| 4. Contratos, UCs, faturas, aluguéis | Concluída (aguardando validação; não aplicada no Supabase) |
 | 5. Produtividade | Não iniciada (pendente material) |
 | 6. Relatórios e exportações | Não iniciada |
 | 7. Testes finais e implantação | Não iniciada |
@@ -69,6 +69,15 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 | D36 | Aviso de prazo: no dia útil anterior e no dia do prazo, uma vez por dia. "Prazo apertado" no painel = prazo em até 2 dias úteis (configurável) | Prompt 6.10 e protótipo | **Sim** |
 | D37 | Calendário: o compromisso pode ter participantes de qualquer unidade; o funcionário vê só onde é participante ou responsável. O calendário "Geral do Gabinete" é da secretária/admin. Feriados ficaram em Calendário › Feriados (resolve a D7) | Prompt 6.3 | **Sim** |
 | D38 | Painel: "% no prazo" considera as demandas concluídas nos últimos 90 dias; a barra mostra a fazer, em andamento (inclui aguardando e revisão) e concluídas nos últimos 30 dias | Protótipo Main | **Sim** |
+| D39 | Contratos: acesso por **módulo** (`contratos`), não por unidade. Quem tem o módulo vê todos os contratos | Prompt 4 (permissão de contratos) | **Sim** |
+| D40 | CPF/CNPJ e contato do locador: as colunas não saem pela API; a RPC devolve mascarado (`***.982.247-**`, `(79) *****-1234`, `lo***@dominio`). Completo só com o módulo extra `locadores_dados`, que **não entra em nenhum pacote padrão** (nem da secretária); cada exibição completa vai para a auditoria. CNPJ de PJ aparece completo (não é dado pessoal) | Prompt 5.1 | **Sim** |
+| D41 | Cadastrar contrato novo, vincular UC, lançar fatura e registrar pagamentos: sem aprovação (registro novo). Alterar contrato cadastrado e aditivo: aprovação da secretária/admin. Só um pedido pendente por contrato. Desfazer pagamento errado: só secretária/admin, com motivo | Prompt 6.6 e 6.9 | **Sim** |
+| D42 | Vigência: `fim_original` (contrato) e `fim_vigencia` (efetiva, muda só por aditivo de prazo aprovado). Encerrar contrato = pedido de alteração | Prompt 6.5 e 6.17 | **Sim** |
+| D43 | Aluguéis gerados mês a mês para toda a vigência, com vencimento no dia escolhido (1–28, padrão 10). Novo valor ou dia valem só para os aluguéis não pagos a partir do mês corrente | Prompt 6.5 | **Sim** |
+| D44 | Renovação: aos 90 dias (`contratos.dias_renovacao`) cria uma vez por vigência a demanda "Renovação do contrato nº X" — responsável = fiscal; quem tem o módulo contratos entra como participante e é avisado; unidade = do fiscal (ou a ocupante, ou o Gabinete); prazo = 30 dias úteis sem passar do fim da vigência; prioridade alta; checklist em `contratos.checklist_renovacao` (provisório) | Prompt 6.17 | **Sim** |
+| D45 | Aviso "contrato vencendo" aos 90, 60, 30 e 15 dias (configurável), uma vez por marco, para o fiscal e quem tem o módulo contratos | Prompt 6.10 | **Sim** |
+| D46 | Toda UC fica ligada a um contrato; fornecedores fixos: Energisa e Cercos (energia), Iguá (água). Uma fatura por UC e competência. Quem tem o módulo `unidades_consumidoras` vê as faturas mas não os contratos | Prompt 6.6 e protótipo | **Sim** |
+| D47 | Tela de lista de contratos (`/contratos`) não tem protótipo: segue o padrão da lista de demandas (abas de filtro + tabela). A ficha segue o protótipo Contrato, com o botão extra "Registrar aditivo" | Desvio de layout registrado | **Sim** |
 | D15 | Repositório público e GitHub Pages nesta fase (só dados fictícios). **Rever antes de qualquer dado real** (repositório privado / Cloudflare Pages / Netlify) | Prompt 7 | Rever antes de dados reais |
 
 ## Pendências (seção 9 do prompt)
@@ -77,7 +86,7 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 |---|---|---|
 | Regras de produtividade (material dos fiscais) | Nada implementado. Item do menu marcado "em definição" | Aguardando SEMFAZ |
 | Lista oficial de cargos | Tabela `cargos` configurável (via aprovação). Seed só com cargos fictícios de exemplo | Aguardando SEMFAZ |
-| Modelo das planilhas de importação | Fase 2: importação de servidores e de saldos com as colunas mínimas do prompt 6.7 (modelo CSV baixável; aceita .xlsx e .csv). Cabeçalhos aceitam variações | Ajustar quando chegar o modelo oficial |
+| Modelo das planilhas de importação | Fase 2: servidores e saldos. Fase 4: contratos (~60) e faturas, com colunas **provisórias** (modelo CSV baixável; aceita .xlsx e .csv; datas dd/mm/aaaa ou célula de data; valores 1.234,56). Cabeçalhos aceitam variações | Ajustar quando chegar o modelo oficial |
 | Permissões padrão por módulo e perfil | Tabela `pacotes_padrao` configurável, com coluna `provisorio = true`. Seed copia **o rascunho** da seção 4 só para decidir quais itens aparecem no menu. O acesso a dados é controlado pelas políticas de escopo de cada tabela | **Aguardando definição oficial. Não tratar como definitivo** |
 | Planilha do RH (saldos de férias, licença-prêmio, folgas) | Importação de saldos pronta (matrícula + 3 saldos), com prévia de erros | Ajustar colunas ao arquivo real do RH |
 
@@ -93,6 +102,29 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 | Dependências | `npm audit --omit=dev` | 0 vulnerabilidades |
 
 **Não executados:** Supabase real (Auth, hook de token, Storage, Edge Function `convidar-usuario`, e-mails de convite e recuperação, MFA real) e CI do GitHub Actions.
+
+## Testes da Fase 4 (executados em 27/11/2026, resultado real)
+
+| Suíte | Resultado |
+|---|---|
+| Tipos (`npm run typecheck`) | ok |
+| Banco, Fases 1–4 (`npm run test:db`) | 96/96 (8 novos: módulo e máscara LGPD, CPF/CNPJ, pagamento e desfazer, aprovação de alteração e aditivo, renovação única e aviso, bloqueio por versão, importação de contratos, UCs e faturas, painel e busca) |
+| Todos (`npm test`, unitários + banco) | 118/118 |
+| SQL único aplicado num banco vazio (com o shim) | ok |
+| Build + CSP (com as variáveis do CI) | ok, 21 páginas |
+| E2E de fumaça | 20/20 |
+| `npm audit --omit=dev` | 0 vulnerabilidades |
+
+**Não executado:** Supabase real (Fases 3 e 4 ainda não aplicadas), envio real de PDF ao Storage e pg_cron real da rotina de contratos.
+
+## Pendências da Fase 4
+
+- **Modelo oficial das planilhas de contratos e faturas** (seção 9): as colunas atuais são provisórias.
+- **Checklist de renovação**: os 4 itens são o exemplo do prompt; validar com a SEMFAZ (`contratos.checklist_renovacao`).
+- **Corrigir dados de locador** (nome, e-mail, telefone) ainda não tem tela; hoje só por pedido de alteração do contrato com justificativa. Criar fluxo de aprovação próprio para o locador.
+- **Reajuste automático** pelo índice na data-base: não implementado (só registro do índice e do mês). O reajuste entra por aditivo ou alteração de valor aprovada.
+- Valor anual mostrado = valor mensal × 12 (o protótipo diz "anual (vigência)"; confirmar se deve ser o total da vigência).
+- **Aplicar as Fases 3 e 4 no Supabase de testes e republicar o site** (aguardando autorização). A migration `20261129000050_fase4_tipos.sql` (valores novos de enum) precisa ser aplicada sozinha, antes das demais.
 
 ## Pendências da Fase 3
 

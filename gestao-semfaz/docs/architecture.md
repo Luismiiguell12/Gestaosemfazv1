@@ -259,6 +259,35 @@ erDiagram
 
 Rotina diária (pg_cron, 06:05 de Brasília): `app.rotinas_diarias_demandas()` cria as ocorrências recorrentes (sem duplicar), aplica e encerra substituições e avisa prazos próximos. A permissão de cada demanda está em uma função só (`app.pode_ver_demanda`), usada pelas políticas, pelo Storage e pelas RPCs.
 
+### Fase 4 (acréscimos)
+
+```mermaid
+erDiagram
+  locadores ||--o{ contratos : "locador"
+  contratos ||--o{ aditivos : "prazo/valor (via aprovação)"
+  contratos ||--o{ alugueis : "mês a mês (único por competência)"
+  contratos ||--o{ contrato_documentos : "PDFs"
+  contratos ||--o{ contrato_historico : "só cresce"
+  contratos ||--o{ unidades_consumidoras : "toda UC tem contrato"
+  unidades_consumidoras ||--o{ faturas : "única por competência"
+  contratos ||--o{ contrato_renovacoes : "uma por vigência"
+  contratos ||--o{ demandas : "renovação"
+  locadores { uuid id PK
+    tipo_pessoa tipo
+    text documento "sem GRANT: só RPC mascarada" }
+  contratos { uuid id PK
+    text numero UK
+    date fim_original
+    date fim_vigencia "efetiva"
+    numeric valor_mensal }
+  faturas { uuid id PK
+    date competencia
+    numeric valor
+    date pago_em }
+```
+
+Acesso: `app.acesso_contratos()` (módulo contratos) para contratos e tudo ligado a eles; `app.acesso_ucs()` (contratos ou unidades consumidoras) para UCs e faturas. A rotina diária passa a chamar `app.rotina_contratos()`: cria a demanda de renovação aos 90 dias (uma vez por vigência) e avisa vencimento aos 90/60/30/15 dias. Alteração de contrato e aditivo entram por `public.solicitar_contrato` e são aplicadas pelo mesmo `decidir_solicitacao` (hash da versão do contrato).
+
 `servidores` entra na Fase 1 só com o núcleo (necessário para usuários e para a regra da matrícula). Saldos, importação por planilha e folhas de ponto: Fase 2.
 
 ## 4. Perfis, escopo e módulos
