@@ -4,7 +4,7 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 
 ## Fase atual
 
-**Fase 6 — Relatórios e exportações**: implementada, aplicada no Supabase de testes e publicada; aguardando validação (27/11/2026). A Fase 5 (Produtividade) foi pulada por enquanto porque depende das regras da SEMFAZ. A pedido do responsável, as Fases 1 a 4 serão testadas e corrigidas depois, com um roteiro geral de testes.
+**Fase 7 — Testes finais e implantação**: parte técnica concluída em 27/11/2026 (verificação de segurança, backup cifrado com restauração testada, guia de implantação, revisão final de segurança e LGPD). **Agora: roteiro geral de testes com o responsável** (`docs/roteiro-testes.md`). A Fase 5 (Produtividade / Adendo 01) continua pendente. **Sistema não liberado para dados reais** (ver `docs/seguranca/fase7-revisao-final.md`).
 
 | Fase | Situação |
 |---|---|
@@ -14,7 +14,7 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 | 4. Contratos, UCs, faturas, aluguéis | Concluída, aplicada e publicada (aguardando validação) |
 | 5. Produtividade | Não iniciada. Regras recebidas no **Adendo 01** (`docs/ADENDO-PRODUTIVIDADE.md`); campos de elegibilidade já criados |
 | 6. Relatórios e exportações | Concluída, aplicada no Supabase de testes e publicada (aguardando validação) |
-| 7. Testes finais e implantação | Não iniciada |
+| 7. Testes finais e implantação | Parte técnica concluída; aguardando o roteiro de testes do responsável e as decisões de produção |
 
 ## Ambiente de desenvolvimento (verificado em 26/11/2026, ambiente de nuvem do Claude Code)
 
@@ -88,6 +88,9 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 | D55 | Campos da seção 2 do adendo criados já agora (migration `20261130000200_adendo_servidores_cargos.sql`, só acrescenta colunas): `servidores.tipo_vinculo` (efetivo/comissionado/temporário), `servidores.exerce_comissao` (sim/não), `cargos.carreira_excluida` (sim/não, nenhum marcado) e `elegivel_adicional`, **calculado** pelo banco (efetivo e carreira não excluída), sem coluna digitável | Adendo 01, seção 2 e 12 | Não |
 | D56 | Vínculo obrigatório para cadastro novo e na importação de servidores (coluna "tipo de vínculo"; "cargo em comissão/função de confiança" opcional, sim/não). Servidores **já cadastrados ficam sem vínculo** até alguém informar por pedido de alteração — enquanto isso são **não elegíveis** (opção mais conservadora). Depois de informado, o vínculo não pode voltar a ficar vazio | Adendo 01, seção 2 | **Sim** |
 | D57 | Alterar vínculo e função de confiança do servidor e a marca de carreira excluída do cargo passa pela central de aprovações (dados já cadastrados) | Prompt 6.9 | Não |
+| D58 | Backup próprio diário (03:17 Brasília) pelo GitHub Actions: dados do banco (`public`, `app` e usuários do Auth) + arquivos do Storage, **cifrados com AES-256** antes de sair do runner; artefato por 30 dias. Estrutura não entra no backup (vem das migrations). Complementa o backup/PITR do plano pago do Supabase | Prompt 7 / Fase 7 | **Sim** |
+| D59 | Restauração só em banco **sem servidores cadastrados** (projeto novo), com gatilhos desligados durante a carga (auditoria não duplica). Testada a cada mudança no CI com dados fictícios | Fase 7 | Não |
+| D60 | `scripts/verificar-seguranca.sql` (somente leitura) é o portão de implantação: o CI reprova com qualquer FALHA; produção só sobe sem FALHA | Fase 7 | Não |
 | D15 | Repositório público e GitHub Pages nesta fase (só dados fictícios). **Rever antes de qualquer dado real** (repositório privado / Cloudflare Pages / Netlify) | Prompt 7 | Rever antes de dados reais |
 
 ## Pendências (seção 9 do prompt)
@@ -169,6 +172,26 @@ Arquivo: `docs/ADENDO-PRODUTIVIDADE.md`. Transforma o módulo de Produtividade n
 | E2E de fumaça | 20/20 (inclui baixar Excel e PDF de verdade e conferir o arquivo) |
 
 **Não executado:** Supabase real (Fase 6 ainda não aplicada); abrir os arquivos no Excel/LibreOffice de verdade (conferido só a estrutura do arquivo).
+
+## Fase 7 (executado em 27/11/2026, resultado real)
+
+| Item | Resultado |
+|---|---|
+| `scripts/verificar-seguranca.sql` no Supabase de testes | **0 FALHA**; 3 ATENÇÃO esperadas (MFA desligada nos testes, permissões provisórias, servidores sem vínculo) |
+| `scripts/testar-restauracao.sh` (local e no CI) | ok: 43 tabelas idênticas, 331 linhas; numeração das demandas continua; arquivo cifrado sem texto legível |
+| `scripts/backup-storage.mjs` contra Storage simulado | ok: buckets e pastas aninhadas; chave errada recusada |
+| CI com os passos novos (restauração + verificação) | verde |
+| Workflow `backup.yml` real | **não executado**: faltam os secrets `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `BACKUP_PASSPHRASE` |
+
+Documentos: `docs/implantacao.md` (passo a passo e checklist de produção), `docs/seguranca/fase7-revisao-final.md` (OWASP consolidado, riscos R1–R8, LGPD), `docs/roteiro-testes.md` (roteiro geral para o responsável).
+
+## Pendências da Fase 7
+
+- **Roteiro geral de testes** pelo responsável (`docs/roteiro-testes.md`) e correções do que aparecer.
+- **Secrets do backup** no GitHub (ver `docs/implantacao.md`, seção 4) e uma execução manual com sucesso.
+- Decisões de produção: hospedagem com cabeçalhos HTTP, repositório privado, SMTP institucional, plano do Supabase com backup/PITR (riscos R1–R8 da revisão final).
+- Parecer do DPO sobre `docs/lgpd.md` (bases legais, retenção, aviso de privacidade).
+- Fase 5 (Produtividade / Adendo 01).
 
 ## Pendências da Fase 6
 
