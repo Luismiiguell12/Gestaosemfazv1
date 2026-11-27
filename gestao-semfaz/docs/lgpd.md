@@ -1,6 +1,6 @@
 # Gestão SEMFAZ — Dados pessoais tratados (rascunho para o encarregado/DPO)
 
-Situação: **rascunho (Fases 1 a 4)**. Atualizar a cada fase. Nenhum dado real antes da validação institucional.
+Situação: **rascunho (Fases 1 a 4 e 6)**. Atualizar a cada fase. Nenhum dado real antes da validação institucional.
 
 ## Fase 1
 
@@ -41,6 +41,14 @@ Situação: **rascunho (Fases 1 a 4)**. Atualizar a cada fase. Nenhum dado real 
 | CPF, e-mail e telefone do locador | Locador PF | Execução do contrato e contato | **Mascarados** para quem tem o módulo contratos; completos só com a permissão `locadores_dados` (cada exibição é auditada) | `locadores` (colunas sem acesso pela API) |
 | PDFs do contrato e aditivos | Locador | Instrução do contrato | Quem tem o módulo contratos | bucket privado `contratos` |
 | Fiscal do contrato | Servidor | Responsável pela fiscalização e pela renovação | Quem tem o módulo contratos | `contratos` |
+
+## Fase 6
+
+| Dado | Titular | Finalidade | Quem acessa | Onde |
+|---|---|---|---|---|
+| Histórico de exportações (relatório, filtros, formato, nº de linhas) | Usuário | Rastreabilidade das exportações | O próprio; auditoria (secretária/admin) | `exportacoes`, `auditoria` |
+
+Os arquivos exportados são gerados no aparelho de quem pediu e não ficam guardados no sistema. Os relatórios trazem só o que o perfil já pode ver nas telas. O CPF do locador não entra em nenhum relatório.
 
 ## Próximas fases (previsto pelo prompt)
 
