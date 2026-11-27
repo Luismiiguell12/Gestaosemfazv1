@@ -288,6 +288,10 @@ erDiagram
 
 Acesso: `app.acesso_contratos()` (módulo contratos) para contratos e tudo ligado a eles; `app.acesso_ucs()` (contratos ou unidades consumidoras) para UCs e faturas. A rotina diária passa a chamar `app.rotina_contratos()`: cria a demanda de renovação aos 90 dias (uma vez por vigência) e avisa vencimento aos 90/60/30/15 dias. Alteração de contrato e aditivo entram por `public.solicitar_contrato` e são aplicadas pelo mesmo `decidir_solicitacao` (hash da versão do contrato).
 
+### Fase 6 (acréscimos)
+
+Relatórios: uma função `public.relatorio_*` por relatório, `security invoker` (a RLS das tabelas decide o que entra), mais a checagem `app.pode_relatorio(módulo)`. O navegador gera o arquivo (`src/lib/exportar.ts`: CSV próprio, XLSX montado com `fflate`, PDF com `pdf-lib`) depois de `registrar_exportacao`, que grava a auditoria, o histórico `exportacoes` e aplica o limite por hora. Catálogo dos relatórios (filtros e colunas): `src/lib/relatorios.ts`.
+
 `servidores` entra na Fase 1 só com o núcleo (necessário para usuários e para a regra da matrícula). Saldos, importação por planilha e folhas de ponto: Fase 2.
 
 ## 4. Perfis, escopo e módulos

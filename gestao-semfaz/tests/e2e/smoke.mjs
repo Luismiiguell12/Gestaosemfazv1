@@ -123,6 +123,9 @@ async function simularApi(page, perfil, aal) {
       { uc_id: 'uc3', fornecedor: 'cercos', numero: '0000031', descricao: null, contrato_id: 'ct2', contrato_numero: '022/2024', imovel: 'Arquivo central', fatura_id: 'f3', consumo: 210, valor: 196.5, vencimento: '2026-11-12', pago_em: null, situacao: 'atrasada' },
       { uc_id: 'uc4', fornecedor: 'energisa', numero: '0000011', descricao: null, contrato_id: 'ct2', contrato_numero: '022/2024', imovel: 'Arquivo central', fatura_id: null, consumo: null, valor: null, vencimento: null, pago_em: null, situacao: 'sem_lancamento' },
     ]);
+    if (p.endsWith('/rpc/relatorio_demandas_unidade')) return json([{ unidade: 'COFIT', abertas: 5, atrasadas: 2, criadas_periodo: 7, concluidas_periodo: 9, concluidas_no_prazo: 8, no_prazo_pct: 89 }, { unidade: 'CONTA', abertas: 3, atrasadas: 0, criadas_periodo: 2, concluidas_periodo: 4, concluidas_no_prazo: 4, no_prazo_pct: 100 }]);
+    if (p.endsWith('/rpc/relatorio_alugueis')) return json([{ competencia: '2026-10-01', contrato: '014/2024', locador: 'Locador Exemplo 1', imovel: 'Imóvel da COAC', valor: 3740, vencimento: '2026-10-10', pago_em: '2026-10-05', valor_pago: 3740, situacao: 'pago' }]);
+    if (p.endsWith('/rpc/registrar_exportacao')) return route.fulfill({ status: 204, body: '' });
     if (p.endsWith('/rpc/busca_geral')) return json([{ tipo: 'unidade', id: 'cofit', titulo: 'COFIT', subtitulo: 'Coordenadoria de Fiscalização e Tributos', rota: '/usuarios?unidade=cofit' }]);
     const t = p.split('/').pop();
     const ano = new Date().getFullYear();
@@ -238,15 +241,26 @@ await passo('unidades e usuários: árvore, tabela e perfis', async () => {
   await page.screenshot({ path: `${SHOTS}/usuarios-detalhe.png` });
 });
 
-await passo('feriados e relatórios (auditoria)', async () => {
+await passo('feriados e relatórios (prévia e exportação Excel/PDF)', async () => {
   const page = await novaPagina({ perfil: 'secretaria' });
   await page.goto(`${BASE}/calendario/feriados/`);
   await page.getByText('Natal').waitFor();
   await page.screenshot({ path: `${SHOTS}/feriados.png`, fullPage: true });
   await page.goto(`${BASE}/relatorios/`);
-  await page.getByRole('button', { name: 'Consultar' }).click();
-  await page.getByText('Nenhum registro no período.').waitFor();
+  await page.getByRole('heading', { name: 'Demandas por unidade' }).waitFor();
+  assert.equal(await page.getByRole('button', { name: /Produtividade/ }).isDisabled(), true);
+  await page.getByRole('button', { name: 'Ver na tela' }).click();
+  await page.getByRole('cell', { name: '89%' }).waitFor();
   await page.screenshot({ path: `${SHOTS}/relatorios.png`, fullPage: true });
+  await page.getByRole('button', { name: /Aluguéis/ }).first().click();
+  await page.getByLabel('Excel').check();
+  const [arq] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Gerar relatório' }).click()]);
+  assert.match(arq.suggestedFilename(), /^alugueis-\d{4}-\d{2}-\d{2}\.xlsx$/);
+  const bytes = readFileSync(await arq.path());
+  assert.equal(bytes.subarray(0, 2).toString(), 'PK');
+  await page.getByLabel('PDF').check();
+  const [pdf] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Gerar relatório' }).click()]);
+  assert.equal(readFileSync(await pdf.path()).subarray(0, 5).toString(), '%PDF-');
 });
 
 await passo('férias: escala, aviso de mesmo cargo, saldos', async () => {

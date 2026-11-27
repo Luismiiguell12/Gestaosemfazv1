@@ -4,16 +4,16 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 
 ## Fase atual
 
-**Fase 4 — Contratos, unidades consumidoras, faturas e aluguéis**: implementada, aguardando validação. A pedido do responsável, as Fases 1 a 3 serão testadas e corrigidas depois, com um roteiro geral de testes (26/11/2026).
+**Fase 6 — Relatórios e exportações**: implementada, aguardando validação (27/11/2026). A Fase 5 (Produtividade) foi pulada por enquanto porque depende das regras da SEMFAZ. A pedido do responsável, as Fases 1 a 4 serão testadas e corrigidas depois, com um roteiro geral de testes.
 
 | Fase | Situação |
 |---|---|
 | 1. Fundação | Concluída e publicada (testes do responsável pendentes) |
 | 2. Servidores, férias, folhas de ponto | Concluída e publicada (testes do responsável pendentes) |
-| 3. Demandas, calendário, painéis | Concluída (aguardando validação; não aplicada no Supabase) |
-| 4. Contratos, UCs, faturas, aluguéis | Concluída (aguardando validação; não aplicada no Supabase) |
-| 5. Produtividade | Não iniciada (pendente material) |
-| 6. Relatórios e exportações | Não iniciada |
+| 3. Demandas, calendário, painéis | Concluída e aplicada no Supabase de testes (aguardando validação) |
+| 4. Contratos, UCs, faturas, aluguéis | Concluída e aplicada no Supabase de testes (aguardando validação) |
+| 5. Produtividade | Não iniciada (aguardando as regras da SEMFAZ) |
+| 6. Relatórios e exportações | Concluída (aguardando validação; não aplicada no Supabase) |
 | 7. Testes finais e implantação | Não iniciada |
 
 ## Ambiente de desenvolvimento (verificado em 26/11/2026, ambiente de nuvem do Claude Code)
@@ -78,6 +78,12 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 | D45 | Aviso "contrato vencendo" aos 90, 60, 30 e 15 dias (configurável), uma vez por marco, para o fiscal e quem tem o módulo contratos | Prompt 6.10 | **Sim** |
 | D46 | Toda UC fica ligada a um contrato; fornecedores fixos: Energisa e Cercos (energia), Iguá (água). Uma fatura por UC e competência. Quem tem o módulo `unidades_consumidoras` vê as faturas mas não os contratos | Prompt 6.6 e protótipo | **Sim** |
 | D47 | Tela de lista de contratos (`/contratos`) não tem protótipo: segue o padrão da lista de demandas (abas de filtro + tabela). A ficha segue o protótipo Contrato, com o botão extra "Registrar aditivo" | Desvio de layout registrado | **Sim** |
+| D48 | Relatórios de dados usam as **mesmas regras de acesso das telas** (funções `security invoker` + RLS): secretária/admin tudo, diretor a diretoria, coordenador a unidade. Cada relatório exige o módulo "relatorios" e o módulo do assunto (contratos, férias, folhas...). Auditoria: só secretária/admin | Prompt 4 (linha Relatórios) | **Sim** |
+| D49 | O pacote padrão (provisório) do funcionário não tem o módulo "relatorios"; quando tiver, ele verá só os próprios dados pela mesma regra | Seção 9 (permissões pendentes) | **Sim** |
+| D50 | Arquivos (PDF, Excel, CSV) são gerados no navegador e **não ficam guardados** no sistema. "Gerados recentemente" guarda só título, filtros, formato e nº de linhas; clicar gera de novo com os dados atuais | Prompt 5.1 (mínimo necessário) | **Sim** |
+| D51 | Toda exportação vai para a auditoria (relatório, formato, filtros, linhas). Limite: 60 exportações por usuário por hora (`relatorios.exportacoes_por_hora`); até 20.000 linhas na auditoria (`relatorios.linhas_max`) | Prompt 5.1 (limite em exportação) | **Sim** |
+| D52 | CSV com `;` e acentos (abre direto no Excel brasileiro); texto que começa com `=`, `+`, `-` ou `@` recebe `'` na frente (proteção contra fórmula maliciosa). Excel com números e datas de verdade, filtro e cabeçalho fixo. PDF em A4 paisagem com filtros, autor, data e páginas numeradas | Prompt 6.11 | Não |
+| D53 | Relatório extra "Entrega das folhas de ponto" (não está no protótipo); "Produtividade" fica visível e desabilitado ("em definição") | Prompt 6.11 ("cada módulo") | **Sim** |
 | D15 | Repositório público e GitHub Pages nesta fase (só dados fictícios). **Rever antes de qualquer dado real** (repositório privado / Cloudflare Pages / Netlify) | Prompt 7 | Rever antes de dados reais |
 
 ## Pendências (seção 9 do prompt)
@@ -117,6 +123,24 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 
 **Não executado:** Supabase real (Fases 3 e 4 ainda não aplicadas), envio real de PDF ao Storage e pg_cron real da rotina de contratos.
 
+## Testes da Fase 6 (executados em 27/11/2026, resultado real)
+
+| Suíte | Resultado |
+|---|---|
+| Tipos (`npm run typecheck`) | ok |
+| Banco, Fases 1–4 e 6 | 100/100 (4 novos: escopo por perfil nos relatórios, módulo exigido, auditoria só gestor, exportação auditada, histórico próprio e limite por hora) |
+| Todos (`npm test`) | 130/130 (unitários novos: CSV com proteção de fórmula, Excel válido, PDF com várias páginas, catálogo e permissões) |
+| Build + CSP | ok, 21 páginas |
+| E2E de fumaça | 20/20 (inclui baixar Excel e PDF de verdade e conferir o arquivo) |
+
+**Não executado:** Supabase real (Fase 6 ainda não aplicada); abrir os arquivos no Excel/LibreOffice de verdade (conferido só a estrutura do arquivo).
+
+## Pendências da Fase 6
+
+- **Relatório de produtividade**: depende da Fase 5.
+- **Aplicar a migration `20261130000100_fase6_relatorios.sql` no Supabase de testes e republicar o site** (aguardando autorização).
+- Abrir os arquivos gerados no Excel e no LibreOffice e conferir a aparência (validação manual).
+
 ## Pendências da Fase 4
 
 - **Modelo oficial das planilhas de contratos e faturas** (seção 9): as colunas atuais são provisórias.
@@ -124,12 +148,12 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 - **Corrigir dados de locador** (nome, e-mail, telefone) ainda não tem tela; hoje só por pedido de alteração do contrato com justificativa. Criar fluxo de aprovação próprio para o locador.
 - **Reajuste automático** pelo índice na data-base: não implementado (só registro do índice e do mês). O reajuste entra por aditivo ou alteração de valor aprovada.
 - Valor anual mostrado = valor mensal × 12 (o protótipo diz "anual (vigência)"; confirmar se deve ser o total da vigência).
-- **Aplicar as Fases 3 e 4 no Supabase de testes e republicar o site** (aguardando autorização). A migration `20261129000050_fase4_tipos.sql` (valores novos de enum) precisa ser aplicada sozinha, antes das demais.
+- ~~Aplicar as Fases 3 e 4 no Supabase de testes~~ **Feito em 27/11/2026** (PR #13 juntado; 8 migrations aplicadas em ordem). Conferido no banco real: 41 tabelas, todas com RLS; nada liberado para `anon`; buckets privados (anexos, contratos, demandas, folhas-ponto); CPF do locador sem acesso pela API; pg_cron com `rotinas-diarias-demandas` e `avisar-atrasos-folhas`; rotina diária executada sem erro.
+- **Republicar o site (GitHub Pages)** com as telas das Fases 3 e 4 (aguardando autorização).
 
 ## Pendências da Fase 3
 
 - **Notificações por e-mail e no celular (push)** (6.10): as notificações internas funcionam. E-mail depende de SMTP próprio no Supabase; push depende de chaves VAPID e de uma Edge Function. Fica para quando o SMTP estiver configurado.
-- **Aplicar a Fase 3 no Supabase de testes e republicar o site** (aguardando autorização).
 - Arrastar cartões no quadro funciona com mouse e toque; pelo teclado, o status muda na ficha da demanda.
 
 ## Pendências da Fase 2
