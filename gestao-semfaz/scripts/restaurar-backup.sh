@@ -26,5 +26,6 @@ fi
   psql "$DB_URL" -tAc "select 'truncate table ' || string_agg(format('%I.%I', schemaname, tablename), ', ') || ' cascade;' from pg_tables where schemaname in ('public','app')"
   [ -f "$PASTA/auth.dump" ] && pg_restore --data-only --no-owner --no-privileges --file=- "$PASTA/auth.dump"
   pg_restore --data-only --no-owner --no-privileges --file=- "$PASTA/dados.dump"
-} | psql "$DB_URL" -v ON_ERROR_STOP=1 --single-transaction -q
+} | grep -v '^SET transaction_timeout' \
+  | psql "$DB_URL" -v ON_ERROR_STOP=1 --single-transaction -q   # (pg_dump 17+ grava transaction_timeout, que servidor 16 não conhece)
 echo "restauração concluída. Confira com scripts/verificar-seguranca.sql e compare com contagem.csv"

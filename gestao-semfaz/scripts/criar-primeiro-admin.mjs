@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Cria o PRIMEIRO administrador (uso local, uma vez). Recusa se já existir administrador.
 // Requer no ambiente (nunca em arquivo versionado): SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.
-// Uso: node scripts/criar-primeiro-admin.mjs --email admin@... --nome "Nome" --matricula 000000 --cargo "Analista de Sistemas" --unidade ASTIN
+// Uso: node scripts/criar-primeiro-admin.mjs --email admin@... --nome "Nome" --matricula 000000 --cargo "Analista de Sistemas" --unidade ASTIN --vinculo efetivo
 // A senha é pedida no terminal (não aparece no histórico do shell).
 import { createClient } from '@supabase/supabase-js';
 import { createInterface } from 'node:readline';
@@ -11,7 +11,8 @@ const { values: a } = parseArgs({ options: { email: { type: 'string' }, nome: { 
 const url = process.env.SUPABASE_URL;
 const chave = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !chave) { console.error('Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no ambiente.'); process.exit(1); }
-for (const k of ['email', 'nome', 'matricula', 'cargo', 'unidade']) if (!a[k]) { console.error(`Informe --${k}`); process.exit(1); }
+for (const k of ['email', 'nome', 'matricula', 'cargo', 'unidade', 'vinculo']) if (!a[k]) { console.error(`Informe --${k}`); process.exit(1); }
+if (!['efetivo', 'comissionado', 'temporario'].includes(a.vinculo)) { console.error('--vinculo deve ser efetivo, comissionado ou temporario'); process.exit(1); }
 
 const perguntarSenha = () => new Promise((ok) => {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -31,7 +32,7 @@ const { data: cg } = await db.from('cargos').select('id').eq('nome', a.cargo).si
 if (!un || !cg) { console.error('Unidade ou cargo não encontrado.'); process.exit(1); }
 
 const { data: sv, error: e1 } = await db.from('servidores')
-  .insert({ nome_completo: a.nome, matricula: a.matricula, cargo_id: cg.id, unidade_id: un.id, email_institucional: a.email.toLowerCase() })
+  .insert({ nome_completo: a.nome, matricula: a.matricula, cargo_id: cg.id, unidade_id: un.id, email_institucional: a.email.toLowerCase(), tipo_vinculo: a.vinculo })
   .select('id').single();
 if (e1) { console.error('Falha ao criar servidor (matrícula ou e-mail já existe?).'); process.exit(1); }
 
