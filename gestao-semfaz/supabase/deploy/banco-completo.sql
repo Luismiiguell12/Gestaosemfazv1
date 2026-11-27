@@ -1,6 +1,6 @@
 -- GERADO AUTOMATICAMENTE por scripts/gerar-sql-unico.mjs. Não editar à mão.
 -- Uso: Supabase (web) → SQL Editor → New query → colar TUDO → Run. Somente em projeto NOVO e vazio.
--- Contém 23 migrations, na ordem.
+-- Contém 28 migrations, na ordem.
 
 -- ===================== 20261126000100_base.sql =====================
 -- Fase 1 · base: extensões, schemas, tipos, utilitários
@@ -4472,3 +4472,1555 @@ begin
   end loop;
   return n;
 end $$;
+
+-- ===================== 20261201000100_fase5_regras_cadastro.sql =====================
+-- Fase 5 · Produtividade (Adendo 01) · regras versionadas, cadastro e designações
+-- Minuta de decreto: todo número fica em prod_regras (versionada por início de vigência).
+
+update public.modulos set status = 'ativo' where codigo = 'produtividade';
+-- permissão produtividade.institucional.gerir (adendo 4.3.4): só como módulo extra
+insert into public.modulos (codigo, nome, rota, icone, ordem, status, fase, no_menu)
+values ('prod_institucional', 'Produtividade · metas e arrecadação', '/produtividade', 'grafico', 150, 'ativo', 5, false)
+on conflict (codigo) do nothing;
+
+-- ===== cadastro: entrada/saída na SEMFAZ (dias elegíveis) e chefia designada =====
+alter table public.servidores
+  add column data_entrada_semfaz date,
+  add column data_saida_semfaz date,
+  add column chefia_designada_id uuid references public.servidores (id),
+  add constraint servidores_datas_semfaz check (data_saida_semfaz is null or data_entrada_semfaz is null or data_saida_semfaz >= data_entrada_semfaz),
+  add constraint servidores_chefia_designada_propria check (chefia_designada_id is distinct from id);
+
+create or replace function app.campos_permitidos(t public.tipo_solicitacao)
+returns text[] language sql immutable set search_path = ''
+as $$
+  select case t
+    when 'unidade_criar' then array['sigla', 'nome', 'tipo', 'unidade_pai_id', 'ordem']
+    when 'unidade_alterar' then array['sigla', 'nome', 'unidade_pai_id', 'ordem', 'ativa']
+    when 'cargo_criar' then array['nome', 'carreira_excluida']
+    when 'cargo_alterar' then array['nome', 'ativo', 'carreira_excluida']
+    when 'servidor_alterar' then array['nome_completo', 'matricula', 'cargo_id', 'unidade_id', 'situacao', 'email_institucional', 'tipo_vinculo', 'exerce_comissao',
+                                       'data_entrada_semfaz', 'data_saida_semfaz']
+    when 'usuario_perfil' then array['perfil']
+    when 'acesso_unidade_conceder' then array['unidade_id']
+    when 'acesso_unidade_retirar' then array['unidade_id']
+    when 'feriado_alterar' then array['data', 'descricao', 'abrangencia']
+    else array[]::text[]
+  end
+$$;
+
+-- chefia substituta/designada (adendo 3.2.1): Secretária ou Administrador, direto e auditado
+create or replace function public.prod_definir_chefia_designada(p_servidor uuid, p_chefia uuid)
+returns void language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not app.gestor_geral() then perform app.erro('Somente a Secretária ou o Administrador do sistema.', '42501'); end if;
+  if p_chefia is not null and not exists (select 1 from public.servidores where id = p_chefia and situacao = 'ativo') then
+    perform app.erro('Chefia inexistente ou inativa.', '22023');
+  end if;
+  update public.servidores set chefia_designada_id = p_chefia where id = p_servidor;
+  if not found then perform app.erro('Servidor não encontrado.', 'P0002'); end if;
+exception when check_violation then perform app.erro('O servidor não pode ser a própria chefia.', '23514');
+end $$;
+
+-- chefe de uma unidade: gabinete → secretária; diretoria → diretor; demais → coordenador/chefe
+create or replace function app.chefe_da_unidade(p_unidade uuid)
+returns uuid language sql stable security definer set search_path = ''
+as $$
+  select s.id from public.usuarios u join public.servidores s on s.id = u.servidor_id join public.unidades un on un.id = p_unidade
+   where u.ativo and s.situacao = 'ativo'
+     and ((un.tipo = 'gabinete' and u.perfil = 'secretaria')
+          or (un.tipo = 'diretoria' and u.perfil = 'diretor' and s.unidade_id = p_unidade)
+          or (un.tipo not in ('gabinete', 'diretoria') and u.perfil = 'coordenador' and s.unidade_id = p_unidade))
+   order by s.nome_completo limit 1
+$$;
+
+-- chefia imediata (adendo 3.2.1): designada > chefe da unidade > (se é o chefe) chefe da unidade superior
+create or replace function app.chefia_imediata(p_servidor uuid)
+returns uuid language plpgsql stable security definer set search_path = ''
+as $$
+declare s public.servidores; v_un uuid; v_chefe uuid; i integer := 0;
+begin
+  select * into s from public.servidores where id = p_servidor;
+  if s.chefia_designada_id is not null then return s.chefia_designada_id; end if;
+  v_un := s.unidade_id;
+  while v_un is not null and i < 10 loop
+    v_chefe := app.chefe_da_unidade(v_un);
+    if v_chefe is not null and v_chefe <> p_servidor then return v_chefe; end if;
+    select unidade_pai_id into v_un from public.unidades where id = v_un;
+    i := i + 1;
+  end loop;
+  return null;  -- topo (Secretária): sem chefia; designar se for elegível
+end $$;
+
+-- ===== regras versionadas (adendo 5.6) =====
+create table public.prod_regras (
+  id uuid primary key default gen_random_uuid(),
+  versao integer generated always as identity unique,
+  inicio_vigencia date not null unique,
+  indicadores jsonb not null,             -- [{codigo, nome, maximo}]
+  receitas jsonb not null,                -- [{codigo, nome, peso}]  (peso em fração: 0.25)
+  max_funcional numeric(6,2) not null,
+  max_institucional numeric(6,2) not null,
+  minimo_funcional numeric(6,2) not null,
+  minimo_total integer not null,
+  faixas jsonb not null,                  -- [{de, ate, percentual}]
+  percentual_maximo numeric(5,2) not null default 30 check (percentual_maximo > 0 and percentual_maximo <= 30),
+  prazos jsonb not null,                  -- dias úteis: ciencia, recurso, revisao, alerta_revisao; dias corridos: alerta_rascunho
+  afastamentos_exercicio jsonb not null,  -- {ferias: true, ...}; tipo ausente = não conta
+  regra_institucional text not null default 'ultimo_homologado' check (regra_institucional in ('ultimo_homologado')),
+  observacao text check (observacao is null or length(observacao) <= 2000),
+  criado_por uuid references public.usuarios (id),
+  criado_em timestamptz not null default now()
+);
+
+create or replace function app.validar_regras()
+returns trigger language plpgsql set search_path = ''
+as $$
+declare v_soma numeric; v_ant numeric := -1; f jsonb;
+begin
+  if jsonb_typeof(new.indicadores) <> 'array' or jsonb_array_length(new.indicadores) = 0
+     or exists (select 1 from jsonb_array_elements(new.indicadores) x where coalesce(x ->> 'codigo', '') = '' or coalesce(x ->> 'nome', '') = '' or coalesce((x ->> 'maximo')::numeric, 0) <= 0) then
+    raise exception using message = 'Indicadores inválidos (código, nome e máximo > 0).', errcode = '23514';
+  end if;
+  select sum((x ->> 'maximo')::numeric) into v_soma from jsonb_array_elements(new.indicadores) x;
+  if v_soma <> new.max_funcional then raise exception using message = 'A soma dos máximos dos indicadores deve ser igual ao máximo funcional.', errcode = '23514'; end if;
+  if jsonb_typeof(new.receitas) <> 'array' or jsonb_array_length(new.receitas) = 0
+     or exists (select 1 from jsonb_array_elements(new.receitas) x where coalesce(x ->> 'codigo', '') = '' or coalesce((x ->> 'peso')::numeric, 0) <= 0) then
+    raise exception using message = 'Receitas inválidas (código e peso > 0).', errcode = '23514';
+  end if;
+  select sum((x ->> 'peso')::numeric) into v_soma from jsonb_array_elements(new.receitas) x;
+  if v_soma <> 1 then raise exception using message = 'A soma dos pesos das receitas deve ser 100%.', errcode = '23514'; end if;
+  if new.max_funcional + new.max_institucional <> 100 then raise exception using message = 'Máximo funcional + institucional deve ser 100.', errcode = '23514'; end if;
+  if new.minimo_funcional < 0 or new.minimo_funcional > new.max_funcional or new.minimo_total < 0 or new.minimo_total > 100 then
+    raise exception using message = 'Mínimos inválidos.', errcode = '23514';
+  end if;
+  for f in select x from jsonb_array_elements(new.faixas) x order by (x ->> 'de')::numeric loop
+    if (f ->> 'de')::numeric > (f ->> 'ate')::numeric or (f ->> 'de')::numeric <= v_ant
+       or (f ->> 'percentual')::numeric <= 0 or (f ->> 'percentual')::numeric > new.percentual_maximo then
+      raise exception using message = 'Faixas inválidas (sem sobreposição; percentual até o máximo).', errcode = '23514';
+    end if;
+    v_ant := (f ->> 'ate')::numeric;
+  end loop;
+  return new;
+end $$;
+create trigger prod_regras_validar before insert on public.prod_regras for each row execute function app.validar_regras();
+-- versão nunca muda: mudar regra = nova versão
+create trigger prod_regras_imutavel before update or delete on public.prod_regras for each row execute function app.auditoria_imutavel();
+
+insert into public.prod_regras (inicio_vigencia, indicadores, receitas, max_funcional, max_institucional, minimo_funcional, minimo_total, faixas, prazos, afastamentos_exercicio, observacao)
+values ('2026-01-01',
+  '[{"codigo":"F1","nome":"Qualidade e eficiência na execução das atividades","maximo":20},
+    {"codigo":"F2","nome":"Cumprimento de prazos e metas de trabalho","maximo":15},
+    {"codigo":"F3","nome":"Produtividade e entregas realizadas","maximo":15},
+    {"codigo":"F4","nome":"Qualidade do atendimento ao contribuinte e ao público interno","maximo":10},
+    {"codigo":"F5","nome":"Organização, responsabilidade e cooperação institucional","maximo":10}]',
+  '[{"codigo":"R1","nome":"IPTU","peso":0.25},{"codigo":"R2","nome":"ISSQN","peso":0.30},{"codigo":"R3","nome":"ITBI","peso":0.10},
+    {"codigo":"R4","nome":"Taxas (poder de polícia e serviços)","peso":0.10},{"codigo":"R5","nome":"Dívida ativa (recuperação de créditos)","peso":0.25}]',
+  70, 30, 42, 60,
+  '[{"de":60,"ate":69,"percentual":12},{"de":70,"ate":79,"percentual":18},{"de":80,"ate":89,"percentual":24},{"de":90,"ate":100,"percentual":30}]',
+  '{"ciencia":3,"recurso":5,"revisao":10,"alerta_revisao":8,"alerta_rascunho":3}',
+  '{"ferias":true,"licenca_premio":true,"folga":true}',
+  'Valores iniciais da minuta do decreto (Adendo 01). Pendente texto final.');
+
+create or replace function app.regra_vigente(p_data date)
+returns uuid language sql stable security definer set search_path = ''
+as $$ select id from public.prod_regras where inicio_vigencia <= p_data order by inicio_vigencia desc limit 1 $$;
+
+create or replace function public.prod_criar_regra(p_dados jsonb)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid;
+begin
+  if not app.gestor_geral() then perform app.erro('Somente a Secretária ou o Administrador do sistema.', '42501'); end if;
+  if (p_dados ->> 'inicio_vigencia')::date < current_date then perform app.erro('A nova versão só vale de hoje em diante.', '22023'); end if;
+  insert into public.prod_regras (inicio_vigencia, indicadores, receitas, max_funcional, max_institucional, minimo_funcional, minimo_total, faixas,
+                                  percentual_maximo, prazos, afastamentos_exercicio, observacao, criado_por)
+  values ((p_dados ->> 'inicio_vigencia')::date, p_dados -> 'indicadores', p_dados -> 'receitas', (p_dados ->> 'max_funcional')::numeric,
+          (p_dados ->> 'max_institucional')::numeric, (p_dados ->> 'minimo_funcional')::numeric, (p_dados ->> 'minimo_total')::int, p_dados -> 'faixas',
+          coalesce((p_dados ->> 'percentual_maximo')::numeric, 30), p_dados -> 'prazos', p_dados -> 'afastamentos_exercicio', p_dados ->> 'observacao', auth.uid())
+  returning id into v_id;
+  return v_id;
+exception
+  when unique_violation then perform app.erro('Já existe versão com esse início de vigência.', '23505');
+  when not_null_violation or invalid_text_representation or invalid_datetime_format then perform app.erro('Dados da regra incompletos ou inválidos.', '22023');
+end $$;
+
+-- ===== designações: autoridade revisora e instância de homologação (adendo 6.8) =====
+create table public.prod_designacoes (
+  id uuid primary key default gen_random_uuid(),
+  papel text not null check (papel in ('revisora', 'homologacao')),
+  usuario_id uuid not null references public.usuarios (id),
+  inicio date not null default current_date,
+  fim date,
+  ato text check (ato is null or length(ato) <= 300),
+  criado_por uuid references public.usuarios (id),
+  criado_em timestamptz not null default now(),
+  constraint prod_designacoes_periodo check (fim is null or fim >= inicio)
+);
+
+create or replace function app.tem_designacao(p_papel text, p_usuario uuid default null, p_data date default current_date)
+returns boolean language sql stable security definer set search_path = ''
+as $$
+  select exists (select 1 from public.prod_designacoes d join public.usuarios u on u.id = d.usuario_id
+                  where d.papel = p_papel and d.usuario_id = coalesce(p_usuario, auth.uid()) and u.ativo
+                    and d.inicio <= p_data and (d.fim is null or d.fim >= p_data))
+$$;
+grant execute on function app.tem_designacao(text, uuid, date) to authenticated;
+
+create or replace function public.prod_designar(p_papel text, p_usuario uuid, p_inicio date default current_date, p_ato text default null)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid;
+begin
+  if not app.gestor_geral() then perform app.erro('Somente a Secretária ou o Administrador do sistema.', '42501'); end if;
+  insert into public.prod_designacoes (papel, usuario_id, inicio, ato, criado_por) values (p_papel, p_usuario, coalesce(p_inicio, current_date), p_ato, auth.uid())
+  returning id into v_id;
+  return v_id;
+exception when check_violation or foreign_key_violation then perform app.erro('Designação inválida.', '22023');
+end $$;
+
+create or replace function public.prod_encerrar_designacao(p_id uuid, p_fim date default current_date)
+returns void language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not app.gestor_geral() then perform app.erro('Somente a Secretária ou o Administrador do sistema.', '42501'); end if;
+  update public.prod_designacoes set fim = coalesce(p_fim, current_date) where id = p_id and fim is null;
+  if not found then perform app.erro('Designação não encontrada ou já encerrada.', 'P0002'); end if;
+exception when check_violation then perform app.erro('Data de fim antes do início.', '22023');
+end $$;
+
+-- ===== valor em R$ (adendo 5.5): desligado; vencimento básico só se ligado, acesso restrito =====
+insert into public.configuracoes (chave, valor, descricao) values
+  ('produtividade.calcular_valor', 'false', 'Calcular valor em R$ do adicional (pendente de decisão da SEMFAZ; padrão: não)')
+on conflict (chave) do nothing;
+create table public.prod_vencimentos (
+  servidor_id uuid not null references public.servidores (id),
+  competencia date not null check (extract(day from competencia) = 1),
+  vencimento_basico numeric(12,2) not null check (vencimento_basico > 0),
+  informado_por uuid references public.usuarios (id),
+  informado_em timestamptz not null default now(),
+  primary key (servidor_id, competencia)
+);
+
+do $$
+declare t text;
+begin
+  foreach t in array array['prod_regras', 'prod_designacoes', 'prod_vencimentos'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from anon, authenticated', t);
+    execute format('grant select on public.%I to authenticated', t);
+    execute format('create trigger %I after insert or update or delete on public.%I for each row execute function app.auditar_linha()', t || '_auditoria', t);
+  end loop;
+end $$;
+create policy prod_regras_ler on public.prod_regras for select to authenticated using ((select app.sessao_ok()) and (select app.tem_modulo('produtividade')));
+create policy prod_designacoes_ler on public.prod_designacoes for select to authenticated using ((select app.sessao_ok()) and (select app.tem_modulo('produtividade')));
+create policy prod_vencimentos_ler on public.prod_vencimentos for select to authenticated using ((select app.gestor_geral()));
+
+grant execute on function public.prod_definir_chefia_designada(uuid, uuid) to authenticated;
+grant execute on function public.prod_criar_regra(jsonb) to authenticated;
+grant execute on function public.prod_designar(text, uuid, date, text) to authenticated;
+grant execute on function public.prod_encerrar_designacao(uuid, date) to authenticated;
+
+-- ===================== 20261201000200_fase5_institucional.sql =====================
+-- Fase 5 · desempenho institucional (quadrimestral, até 30 pontos) — adendo seção 4
+
+create or replace function app.inicio_quadrimestre(p_ano integer, p_q integer)
+returns date language sql immutable set search_path = ''
+as $$ select make_date(p_ano, (p_q - 1) * 4 + 1, 1) $$;
+create or replace function app.fim_quadrimestre(p_ano integer, p_q integer)
+returns date language sql immutable set search_path = ''
+as $$ select (make_date(p_ano, (p_q - 1) * 4 + 1, 1) + interval '4 months' - interval '1 day')::date $$;
+
+-- permissão produtividade.institucional.gerir: módulo extra "prod_institucional" (Secretária/Admin sempre)
+create or replace function app.gere_institucional()
+returns boolean language sql stable security definer set search_path = ''
+as $$ select app.sessao_ok() and (app.gestor_geral() or app.tem_modulo('prod_institucional')) $$;
+grant execute on function app.gere_institucional() to authenticated;
+
+create table public.prod_metas (
+  id uuid primary key default gen_random_uuid(),
+  ano integer not null check (ano between 2020 and 2100),
+  quadrimestre integer not null check (quadrimestre between 1 and 3),
+  receita text not null check (receita ~ '^R[0-9]{1,2}$'),
+  valor numeric(16,2) not null check (valor > 0),
+  memoria text not null check (length(btrim(memoria)) between 5 and 4000),
+  fonte text not null check (length(btrim(fonte)) between 3 and 500),
+  anexo_path text,
+  retificacao boolean not null default false,
+  justificativa text,
+  vale_para_ciclo boolean not null default true,
+  criado_por uuid references public.usuarios (id),
+  criado_em timestamptz not null default now(),
+  constraint prod_metas_retificacao check (not retificacao or length(btrim(coalesce(justificativa, ''))) >= 10)
+);
+create unique index prod_metas_uk on public.prod_metas (ano, quadrimestre, receita) where not retificacao;
+
+-- meta publicada antes do início; depois que o quadrimestre começa fica TRAVADA (inclusive para o Administrador).
+-- retificação depois do início é só registro: não vale para o ciclo já iniciado (art. 11 § 2º e art. 24).
+create or replace function app.travar_meta()
+returns trigger language plpgsql set search_path = ''
+as $$
+begin
+  if tg_op in ('UPDATE', 'DELETE') and current_date >= app.inicio_quadrimestre(old.ano, old.quadrimestre) then
+    raise exception using message = 'Meta travada: o quadrimestre já começou. Use retificação (não vale para este ciclo).', errcode = '42501';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  if current_date >= app.inicio_quadrimestre(new.ano, new.quadrimestre) then
+    if not new.retificacao then
+      raise exception using message = 'Meta deve ser publicada antes do início do quadrimestre. Depois, só retificação.', errcode = '42501';
+    end if;
+    new.vale_para_ciclo := false;
+  end if;
+  return new;
+end $$;
+create trigger prod_metas_travar before insert or update or delete on public.prod_metas for each row execute function app.travar_meta();
+
+create table public.prod_arrecadacao (
+  id uuid primary key default gen_random_uuid(),
+  ano integer not null check (ano between 2020 and 2100),
+  quadrimestre integer not null check (quadrimestre between 1 and 3),
+  receita text not null check (receita ~ '^R[0-9]{1,2}$'),
+  valor numeric(16,2) not null check (valor >= 0),
+  fonte text not null check (length(btrim(fonte)) between 3 and 500),
+  anexo_path text,
+  origem text not null default 'manual' check (origem in ('manual', 'importacao')),
+  criado_por uuid references public.usuarios (id),
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  unique (ano, quadrimestre, receita)
+);
+
+create table public.prod_resultados_inst (
+  id uuid primary key default gen_random_uuid(),
+  ano integer not null,
+  quadrimestre integer not null,
+  regra_id uuid not null references public.prod_regras (id),
+  pontos numeric(8,4) not null check (pontos between 0 and 100),
+  memoria jsonb not null,
+  status text not null default 'apurado' check (status in ('apurado', 'homologado')),
+  apurado_por uuid references public.usuarios (id),
+  apurado_em timestamptz not null default now(),
+  homologado_por uuid references public.usuarios (id),
+  homologado_em timestamptz,
+  unique (ano, quadrimestre),
+  constraint prod_resultado_segregacao check (homologado_por is null or homologado_por is distinct from apurado_por)
+);
+-- homologado = imutável; arrecadação do quadrimestre homologado também
+create or replace function app.resultado_inst_imutavel()
+returns trigger language plpgsql set search_path = ''
+as $$
+begin
+  if old.status = 'homologado' then raise exception using message = 'Resultado institucional homologado não pode ser alterado.', errcode = '42501'; end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end $$;
+create trigger prod_resultados_inst_imutavel before update or delete on public.prod_resultados_inst for each row execute function app.resultado_inst_imutavel();
+create or replace function app.arrecadacao_travada()
+returns trigger language plpgsql set search_path = ''
+as $$
+declare r record := case when tg_op = 'DELETE' then old else new end;
+begin
+  if exists (select 1 from public.prod_resultados_inst x where x.ano = r.ano and x.quadrimestre = r.quadrimestre and x.status = 'homologado')
+     or (tg_op <> 'INSERT' and exists (select 1 from public.prod_resultados_inst x where x.ano = old.ano and x.quadrimestre = old.quadrimestre and x.status = 'homologado')) then
+    raise exception using message = 'Quadrimestre já homologado: arrecadação travada.', errcode = '42501';
+  end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end $$;
+create trigger prod_arrecadacao_travar before insert or update or delete on public.prod_arrecadacao for each row execute function app.arrecadacao_travada();
+
+do $$
+declare t text;
+begin
+  foreach t in array array['prod_metas', 'prod_arrecadacao', 'prod_resultados_inst'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from anon, authenticated', t);
+    execute format('grant select on public.%I to authenticated', t);
+    execute format('create trigger %I after insert or update or delete on public.%I for each row execute function app.auditar_linha()', t || '_auditoria', t);
+    execute format('create policy %I on public.%I for select to authenticated using ((select app.sessao_ok()) and ((select app.tem_modulo(''produtividade'')) or (select app.gere_institucional())))', t || '_ler', t);
+  end loop;
+end $$;
+
+-- ===== lançamentos (RPC) =====
+create or replace function app.receita_valida(p_receita text, p_data date)
+returns boolean language sql stable security definer set search_path = ''
+as $$ select exists (select 1 from public.prod_regras r, jsonb_array_elements(r.receitas) x where r.id = app.regra_vigente(p_data) and x ->> 'codigo' = p_receita) $$;
+
+create or replace function public.prod_salvar_meta(p_ano integer, p_quadrimestre integer, p_receita text, p_valor numeric, p_memoria text, p_fonte text,
+                                                   p_anexo text default null, p_justificativa_retificacao text default null)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid; v_inicio date := app.inicio_quadrimestre(p_ano, p_quadrimestre);
+begin
+  if not app.gere_institucional() then perform app.erro('Sem permissão para metas e arrecadação.', '42501'); end if;
+  if not app.receita_valida(p_receita, v_inicio) then perform app.erro('Receita inválida para a regra vigente.', '22023'); end if;
+  if p_justificativa_retificacao is not null then
+    insert into public.prod_metas (ano, quadrimestre, receita, valor, memoria, fonte, anexo_path, retificacao, justificativa, criado_por)
+    values (p_ano, p_quadrimestre, p_receita, p_valor, p_memoria, p_fonte, p_anexo, true, p_justificativa_retificacao, auth.uid()) returning id into v_id;
+  else
+    insert into public.prod_metas (ano, quadrimestre, receita, valor, memoria, fonte, anexo_path, criado_por)
+    values (p_ano, p_quadrimestre, p_receita, p_valor, p_memoria, p_fonte, p_anexo, auth.uid())
+    on conflict (ano, quadrimestre, receita) where not retificacao
+    do update set valor = excluded.valor, memoria = excluded.memoria, fonte = excluded.fonte, anexo_path = excluded.anexo_path, criado_por = excluded.criado_por, criado_em = now()
+    returning id into v_id;
+  end if;
+  return v_id;
+exception when check_violation then perform app.erro('Dados da meta inválidos (valor > 0, memória de cálculo e fonte obrigatórias).', '23514');
+end $$;
+
+create or replace function public.prod_salvar_arrecadacao(p_ano integer, p_quadrimestre integer, p_receita text, p_valor numeric, p_fonte text, p_anexo text default null)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid;
+begin
+  if not app.gere_institucional() then perform app.erro('Sem permissão para metas e arrecadação.', '42501'); end if;
+  if not app.receita_valida(p_receita, app.inicio_quadrimestre(p_ano, p_quadrimestre)) then perform app.erro('Receita inválida para a regra vigente.', '22023'); end if;
+  insert into public.prod_arrecadacao (ano, quadrimestre, receita, valor, fonte, anexo_path, criado_por)
+  values (p_ano, p_quadrimestre, p_receita, p_valor, p_fonte, p_anexo, auth.uid())
+  on conflict (ano, quadrimestre, receita) do update set valor = excluded.valor, fonte = excluded.fonte, anexo_path = excluded.anexo_path,
+    criado_por = excluded.criado_por, atualizado_em = now()
+  returning id into v_id;
+  -- resultado ainda não homologado precisa ser apurado de novo
+  delete from public.prod_resultados_inst where ano = p_ano and quadrimestre = p_quadrimestre and status = 'apurado';
+  return v_id;
+exception when check_violation then perform app.erro('Dados da arrecadação inválidos (valor ≥ 0 e fonte obrigatória).', '23514');
+end $$;
+
+-- importação: colunas ano, quadrimestre, receita (código R1..R5), valor, fonte. Prévia → tudo ou nada.
+create or replace function app.validar_planilha_arrecadacao(p_linhas jsonb)
+returns table (linha integer, campo text, mensagem text)
+language plpgsql stable security definer set search_path = ''
+as $$
+declare r jsonb; n integer; v_ano integer; v_q integer;
+begin
+  if jsonb_typeof(p_linhas) <> 'array' or jsonb_array_length(p_linhas) = 0 then perform app.erro('Planilha sem linhas.', '22023'); end if;
+  if jsonb_array_length(p_linhas) > 500 then perform app.erro('Máximo de 500 linhas.', '22023'); end if;
+  for r in select * from jsonb_array_elements(p_linhas) loop
+    n := coalesce((r ->> 'linha')::int, 0);
+    v_ano := case when btrim(coalesce(r ->> 'ano', '')) ~ '^\d{4}$' then (r ->> 'ano')::int end;
+    v_q := case when btrim(coalesce(r ->> 'quadrimestre', '')) ~ '^[1-3]$' then (r ->> 'quadrimestre')::int end;
+    if v_ano is null then return query select n, 'ano', 'Ano inválido (aaaa).'; end if;
+    if v_q is null then return query select n, 'quadrimestre', 'Quadrimestre deve ser 1, 2 ou 3.'; end if;
+    if v_ano is not null and v_q is not null and not app.receita_valida(upper(btrim(coalesce(r ->> 'receita', ''))), app.inicio_quadrimestre(v_ano, v_q)) then
+      return query select n, 'receita', 'Receita inválida (use o código: R1 a R5).';
+    elsif v_ano is not null and v_q is not null and exists (select 1 from public.prod_resultados_inst x where x.ano = v_ano and x.quadrimestre = v_q and x.status = 'homologado') then
+      return query select n, 'quadrimestre', 'Quadrimestre já homologado.';
+    elsif (select count(*) from jsonb_array_elements(p_linhas) x where btrim(x ->> 'ano') = btrim(r ->> 'ano') and btrim(x ->> 'quadrimestre') = btrim(r ->> 'quadrimestre')
+             and upper(btrim(x ->> 'receita')) = upper(btrim(r ->> 'receita'))) > 1 then
+      return query select n, 'receita', 'Receita repetida na planilha.';
+    end if;
+    if app.valor_planilha(r ->> 'valor') is null then return query select n, 'valor', 'Valor inválido.'; end if;
+    if length(btrim(coalesce(r ->> 'fonte', ''))) < 3 then return query select n, 'fonte', 'Informe a fonte (relatório contábil oficial).'; end if;
+  end loop;
+end $$;
+
+create or replace function public.prod_importar_arrecadacao_previa(p_linhas jsonb)
+returns table (linha integer, campo text, mensagem text)
+language plpgsql stable security definer set search_path = ''
+as $$
+begin
+  if not app.gere_institucional() then perform app.erro('Sem permissão para metas e arrecadação.', '42501'); end if;
+  return query select * from app.validar_planilha_arrecadacao(p_linhas) order by 1, 2;
+end $$;
+
+create or replace function public.prod_importar_arrecadacao(p_linhas jsonb)
+returns integer language plpgsql security definer set search_path = ''
+as $$
+declare r jsonb; n integer := 0;
+begin
+  if not app.gere_institucional() then perform app.erro('Sem permissão para metas e arrecadação.', '42501'); end if;
+  if exists (select 1 from app.validar_planilha_arrecadacao(p_linhas)) then perform app.erro('A planilha tem erros. Corrija e confira a prévia antes de importar.', '22023'); end if;
+  perform set_config('app.origem', 'importacao_arrecadacao', true);
+  for r in select * from jsonb_array_elements(p_linhas) loop
+    perform public.prod_salvar_arrecadacao((r ->> 'ano')::int, (r ->> 'quadrimestre')::int, upper(btrim(r ->> 'receita')), app.valor_planilha(r ->> 'valor'), btrim(r ->> 'fonte'));
+    update public.prod_arrecadacao set origem = 'importacao' where ano = (r ->> 'ano')::int and quadrimestre = (r ->> 'quadrimestre')::int and receita = upper(btrim(r ->> 'receita'));
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
+-- ===== apuração (adendo 4.2): numeric, índice ≤ 1, memória completa; meta 0/ausente = erro claro =====
+create or replace function app.calcular_institucional(p_ano integer, p_q integer, p_regra uuid)
+returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+declare r public.prod_regras; x jsonb; v_meta numeric; v_arr numeric; v_ind numeric; v_soma numeric := 0; v_mem jsonb := '[]'::jsonb;
+begin
+  select * into r from public.prod_regras where id = p_regra;
+  for x in select * from jsonb_array_elements(r.receitas) loop
+    select m.valor into v_meta from public.prod_metas m
+     where m.ano = p_ano and m.quadrimestre = p_q and m.receita = x ->> 'codigo' and not m.retificacao and m.vale_para_ciclo;
+    if coalesce(v_meta, 0) <= 0 then
+      perform app.erro(format('Quadrimestre %s/%s não pode ser apurado: meta ausente ou zero para %s.', p_q, p_ano, x ->> 'nome'), '22023');
+    end if;
+    select a.valor into v_arr from public.prod_arrecadacao a where a.ano = p_ano and a.quadrimestre = p_q and a.receita = x ->> 'codigo';
+    if v_arr is null then perform app.erro(format('Quadrimestre %s/%s não pode ser apurado: falta a arrecadação de %s.', p_q, p_ano, x ->> 'nome'), '22023'); end if;
+    v_ind := least(1::numeric, v_arr / v_meta);
+    v_soma := v_soma + v_ind * (x ->> 'peso')::numeric;
+    v_mem := v_mem || jsonb_build_object('receita', x ->> 'codigo', 'nome', x ->> 'nome', 'meta', v_meta, 'arrecadado', v_arr,
+                                         'indice', round(v_ind, 4), 'peso', (x ->> 'peso')::numeric, 'contribuicao', round(v_ind * (x ->> 'peso')::numeric, 4));
+  end loop;
+  return jsonb_build_object('pontos', round(least(r.max_institucional, v_soma * r.max_institucional), 4), 'soma_contribuicoes', round(v_soma, 4),
+                            'max_institucional', r.max_institucional, 'receitas', v_mem, 'regra_versao', r.versao);
+end $$;
+
+create or replace function public.prod_apurar_institucional(p_ano integer, p_quadrimestre integer)
+returns jsonb language plpgsql security definer set search_path = ''
+as $$
+declare v_regra uuid := app.regra_vigente(app.inicio_quadrimestre(p_ano, p_quadrimestre)); v jsonb;
+begin
+  if not app.gere_institucional() then perform app.erro('Sem permissão para metas e arrecadação.', '42501'); end if;
+  if current_date <= app.fim_quadrimestre(p_ano, p_quadrimestre) then perform app.erro('O quadrimestre ainda não terminou.', '22023'); end if;
+  if exists (select 1 from public.prod_resultados_inst where ano = p_ano and quadrimestre = p_quadrimestre and status = 'homologado') then
+    perform app.erro('Quadrimestre já homologado.', '22023');
+  end if;
+  v := app.calcular_institucional(p_ano, p_quadrimestre, v_regra);
+  delete from public.prod_resultados_inst where ano = p_ano and quadrimestre = p_quadrimestre and status = 'apurado';
+  insert into public.prod_resultados_inst (ano, quadrimestre, regra_id, pontos, memoria, apurado_por)
+  values (p_ano, p_quadrimestre, v_regra, (v ->> 'pontos')::numeric, v, auth.uid());
+  return v;
+end $$;
+
+create or replace function public.prod_homologar_institucional(p_ano integer, p_quadrimestre integer)
+returns void language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not (app.sessao_ok() and app.tem_designacao('homologacao')) then perform app.erro('Somente a instância de homologação designada.', '42501'); end if;
+  update public.prod_resultados_inst set status = 'homologado', homologado_por = auth.uid(), homologado_em = now()
+   where ano = p_ano and quadrimestre = p_quadrimestre and status = 'apurado';
+  if not found then perform app.erro('Resultado não apurado ou já homologado.', 'P0002'); end if;
+exception when check_violation then perform app.erro('Quem apurou não pode homologar o mesmo resultado.', '42501');
+end $$;
+
+grant execute on function public.prod_salvar_meta(integer, integer, text, numeric, text, text, text, text) to authenticated;
+grant execute on function public.prod_salvar_arrecadacao(integer, integer, text, numeric, text, text) to authenticated;
+grant execute on function public.prod_importar_arrecadacao_previa(jsonb) to authenticated;
+grant execute on function public.prod_importar_arrecadacao(jsonb) to authenticated;
+grant execute on function public.prod_apurar_institucional(integer, integer) to authenticated;
+grant execute on function public.prod_homologar_institucional(integer, integer) to authenticated;
+
+-- ===================== 20261201000300_fase5_ciclo_apuracao.sql =====================
+-- Fase 5 · ciclo mensal de avaliação (adendo seções 3, 5, 6 e 9): tabelas, acesso, imutabilidade, segregação e apuração
+
+create table public.prod_competencias (
+  competencia date primary key check (extract(day from competencia) = 1),
+  regra_id uuid not null references public.prod_regras (id),
+  fechamento date not null,
+  status text not null default 'aberta' check (status in ('aberta', 'encaminhada')),
+  aberta_por uuid references public.usuarios (id),
+  aberta_em timestamptz not null default now()
+);
+
+create table public.prod_avaliacoes (
+  id uuid primary key default gen_random_uuid(),
+  competencia date not null references public.prod_competencias (competencia),
+  servidor_id uuid not null references public.servidores (id),
+  periodo_inicio date not null,
+  periodo_fim date not null,
+  unidade_id uuid references public.unidades (id),
+  avaliador_id uuid references public.servidores (id),
+  status text not null default 'rascunho'
+    check (status in ('rascunho', 'enviada', 'ciente', 'em_recurso', 'aguardando_homologacao', 'homologada', 'retificada')),
+  limitacoes text check (limitacoes is null or length(limitacoes) <= 3000),
+  total_funcional numeric(6,2),
+  enviada_em timestamptz,
+  ciente_em timestamptz,
+  ciencia_meio text check (ciencia_meio in ('sistema', 'outro_meio')),
+  ciencia_anexo text,
+  ciencia_registrada_por uuid references public.usuarios (id),
+  prazo_recurso date,
+  sem_recurso_em timestamptz,
+  homologada_por uuid references public.usuarios (id),
+  homologada_em timestamptz,
+  devolucao_motivo text,
+  retifica_id uuid references public.prod_avaliacoes (id),
+  retificacao_justificativa text,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  constraint prod_av_periodo check (periodo_fim >= periodo_inicio and date_trunc('month', periodo_inicio) = competencia and date_trunc('month', periodo_fim) = competencia),
+  constraint prod_av_autoavaliacao check (avaliador_id is distinct from servidor_id),          -- ninguém avalia a si mesmo
+  constraint prod_av_ciencia_outro_meio check (ciencia_meio is distinct from 'outro_meio' or ciencia_anexo is not null)
+);
+create unique index prod_av_periodo_uk on public.prod_avaliacoes (competencia, servidor_id, periodo_inicio) where status <> 'retificada';
+create index prod_av_avaliador_idx on public.prod_avaliacoes (avaliador_id, competencia);
+create trigger prod_av_atualizado before update on public.prod_avaliacoes for each row execute function app.tocar_atualizado_em();
+
+create table public.prod_notas (
+  avaliacao_id uuid not null references public.prod_avaliacoes (id),
+  indicador text not null,
+  nota numeric(5,2) check (nota >= 0 and nota <= 100),          -- e o trigger confere o máximo do indicador
+  justificativa text check (justificativa is null or length(justificativa) <= 4000),
+  equivalente boolean not null default false,
+  justificativa_equivalente text check (justificativa_equivalente is null or length(justificativa_equivalente) <= 2000),
+  primary key (avaliacao_id, indicador)
+);
+
+create table public.prod_provas (
+  id uuid primary key default gen_random_uuid(),
+  avaliacao_id uuid not null references public.prod_avaliacoes (id),
+  indicador text not null,
+  tipo text not null check (tipo in ('demanda', 'checklist', 'mensagem', 'anexo', 'externa')),
+  ref_id uuid,
+  path text,
+  nome text check (nome is null or length(nome) <= 200),
+  descricao text check (descricao is null or length(descricao) <= 1000),
+  criado_por uuid references public.usuarios (id),
+  criado_em timestamptz not null default now(),
+  constraint prod_provas_coerente check (
+    (tipo in ('demanda', 'checklist', 'mensagem') and ref_id is not null) or (tipo = 'anexo' and path is not null) or (tipo = 'externa' and length(btrim(coalesce(descricao, ''))) >= 3))
+);
+create index prod_provas_av_idx on public.prod_provas (avaliacao_id, indicador);
+
+create table public.prod_recursos (
+  id uuid primary key default gen_random_uuid(),
+  avaliacao_id uuid not null references public.prod_avaliacoes (id),
+  razoes text not null check (length(btrim(razoes)) between 10 and 6000),
+  anexo_path text,
+  criado_em timestamptz not null default now(),
+  prazo_revisao date not null,
+  revisor_id uuid references public.usuarios (id),
+  fundamentacao text check (fundamentacao is null or length(btrim(fundamentacao)) >= 20),
+  decidido_em timestamptz,
+  notas_antes jsonb,
+  notas_depois jsonb,
+  constraint prod_recurso_decisao check ((decidido_em is null) = (fundamentacao is null))
+);
+
+create table public.prod_historico (
+  id bigint generated always as identity primary key,
+  avaliacao_id uuid not null references public.prod_avaliacoes (id),
+  em timestamptz not null default now(),
+  ator_id uuid references public.usuarios (id),
+  acao text not null,
+  detalhes jsonb not null default '{}'::jsonb
+);
+
+-- demonstrativo congelado na homologação (memória de cálculo guardada para sempre)
+create table public.prod_apuracoes (
+  competencia date not null,
+  servidor_id uuid not null references public.servidores (id),
+  versao integer not null,
+  dados jsonb not null,
+  criado_em timestamptz not null default now(),
+  primary key (competencia, servidor_id, versao)
+);
+
+create table public.prod_encaminhamentos (
+  id uuid primary key default gen_random_uuid(),
+  competencia date not null references public.prod_competencias (competencia),
+  versao integer not null,
+  linhas jsonb not null,
+  observacao text,
+  gerado_por uuid references public.usuarios (id),
+  gerado_em timestamptz not null default now(),
+  unique (competencia, versao)
+);
+
+create table public.prod_correcoes (
+  id uuid primary key default gen_random_uuid(),
+  competencia date not null,
+  servidor_id uuid not null references public.servidores (id),
+  avaliacao_id uuid references public.prod_avaliacoes (id),
+  descricao text not null check (length(btrim(descricao)) between 10 and 3000),
+  nova_avaliacao_id uuid references public.prod_avaliacoes (id),
+  registrada_por uuid references public.usuarios (id),
+  em timestamptz not null default now()
+);
+
+create table public.prod_alertas (
+  avaliacao_id uuid not null,
+  tipo text not null,
+  chave text not null default '',
+  em timestamptz not null default now(),
+  primary key (avaliacao_id, tipo, chave)
+);
+
+-- ===== guarda permanente e imutabilidade (adendo 9) =====
+do $$
+declare t text;
+begin
+  foreach t in array array['prod_historico', 'prod_apuracoes', 'prod_encaminhamentos', 'prod_correcoes'] loop
+    execute format('create trigger %I before update or delete on public.%I for each row execute function app.auditoria_imutavel()', t || '_imutavel', t);
+  end loop;
+end $$;
+create trigger prod_avaliacoes_sem_delete before delete on public.prod_avaliacoes for each row execute function app.auditoria_imutavel();
+create trigger prod_recursos_sem_delete before delete on public.prod_recursos for each row execute function app.auditoria_imutavel();
+
+-- avaliação homologada não muda (só passa a "retificada"); retificada nunca muda
+create or replace function app.prod_av_imutavel()
+returns trigger language plpgsql set search_path = ''
+as $$
+begin
+  if old.status = 'retificada' or (old.status = 'homologada' and (new.status <> 'retificada'
+       or (to_jsonb(new) - array['status', 'atualizado_em']) is distinct from (to_jsonb(old) - array['status', 'atualizado_em']))) then
+    raise exception using message = 'Avaliação homologada não pode ser alterada. Use retificação.', errcode = '42501';
+  end if;
+  return new;
+end $$;
+create trigger prod_av_imutavel before update on public.prod_avaliacoes for each row execute function app.prod_av_imutavel();
+
+-- notas e provas: só com a avaliação em rascunho (chefia) ou em recurso (revisora); nota ≤ máximo da versão da regra
+create or replace function app.prod_nota_valida()
+returns trigger language plpgsql set search_path = ''
+as $$
+declare a public.prod_avaliacoes; v_max numeric; v_av uuid := case when tg_op = 'DELETE' then old.avaliacao_id else new.avaliacao_id end;
+begin
+  select * into a from public.prod_avaliacoes where id = v_av;
+  if a.status not in ('rascunho', 'em_recurso') then
+    raise exception using message = 'Notas e provas só mudam com a avaliação em rascunho (ou em recurso, pela autoridade revisora).', errcode = '42501';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  if tg_table_name = 'prod_notas' then
+    select (x ->> 'maximo')::numeric into v_max
+      from public.prod_competencias c join public.prod_regras r on r.id = c.regra_id, jsonb_array_elements(r.indicadores) x
+     where c.competencia = a.competencia and x ->> 'codigo' = new.indicador;
+    if v_max is null then raise exception using message = 'Indicador inexistente na regra deste ciclo.', errcode = '23514'; end if;
+    if new.nota is not null and (new.nota < 0 or new.nota > v_max) then
+      raise exception using message = format('Nota do indicador %s deve ficar entre 0 e %s.', new.indicador, v_max), errcode = '23514';
+    end if;
+  end if;
+  return new;
+end $$;
+create trigger prod_notas_valida before insert or update or delete on public.prod_notas for each row execute function app.prod_nota_valida();
+create trigger prod_provas_valida before insert or update or delete on public.prod_provas for each row execute function app.prod_nota_valida();
+
+-- segregação (adendo 6.7), garantida no banco inclusive para o Administrador
+create or replace function app.prod_segregacao()
+returns trigger language plpgsql set search_path = ''
+as $$
+declare a public.prod_avaliacoes; v_serv uuid; v_aval uuid; v_rev uuid;
+begin
+  if tg_table_name = 'prod_recursos' then
+    if new.revisor_id is null then return new; end if;
+    select * into a from public.prod_avaliacoes where id = new.avaliacao_id;
+  else
+    if new.homologada_por is null or new.homologada_por is not distinct from old.homologada_por then return new; end if;
+    a := new;
+  end if;
+  v_serv := app.usuario_do_servidor(a.servidor_id);
+  v_aval := app.usuario_do_servidor(a.avaliador_id);
+  if tg_table_name = 'prod_recursos' then
+    if new.revisor_id in (v_serv, v_aval) then
+      raise exception using message = 'Segregação de funções: quem avaliou (ou o próprio servidor) não pode revisar.', errcode = '42501';
+    end if;
+  else
+    select r.revisor_id into v_rev from public.prod_recursos r where r.avaliacao_id = a.id and r.decidido_em is not null order by r.criado_em desc limit 1;
+    if new.homologada_por in (v_serv, v_aval) or new.homologada_por is not distinct from v_rev then
+      raise exception using message = 'Segregação de funções: quem foi avaliado, avaliou ou revisou não pode homologar.', errcode = '42501';
+    end if;
+  end if;
+  return new;
+end $$;
+create trigger prod_av_segregacao before update on public.prod_avaliacoes for each row execute function app.prod_segregacao();
+create trigger prod_recurso_segregacao before insert or update on public.prod_recursos for each row execute function app.prod_segregacao();
+
+-- ===== quem vê (adendo 8) =====
+create or replace function app.pode_ver_avaliacao(p_id uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $$
+  select app.sessao_ok() and exists (
+    select 1 from public.prod_avaliacoes a where a.id = p_id and (
+      app.gestor_geral()
+      or (a.servidor_id = app.servidor_atual() and a.status <> 'rascunho')                                   -- servidor: a própria, depois de enviada
+      or a.avaliador_id = app.servidor_atual()                                                                -- chefia que avalia
+      or (app.perfil_atual() = 'diretor' and app.na_escopo(a.unidade_id))                                     -- diretor: leitura da diretoria
+      or exists (select 1 from public.prod_recursos r where r.avaliacao_id = a.id and r.revisor_id = auth.uid())
+      or (a.status = 'em_recurso' and app.tem_designacao('revisora'))
+      or (a.status in ('aguardando_homologacao', 'homologada', 'retificada') and app.tem_designacao('homologacao'))
+    ))
+$$;
+grant execute on function app.pode_ver_avaliacao(uuid) to authenticated;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['prod_competencias', 'prod_avaliacoes', 'prod_notas', 'prod_provas', 'prod_recursos', 'prod_historico', 'prod_apuracoes',
+                           'prod_encaminhamentos', 'prod_correcoes', 'prod_alertas'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from anon, authenticated', t);
+    if t not in ('prod_historico', 'prod_alertas') then
+      execute format('create trigger %I after insert or update or delete on public.%I for each row execute function app.auditar_linha()', t || '_auditoria', t);
+    end if;
+  end loop;
+end $$;
+grant select on public.prod_competencias, public.prod_avaliacoes, public.prod_notas, public.prod_provas, public.prod_recursos, public.prod_historico,
+  public.prod_apuracoes, public.prod_encaminhamentos, public.prod_correcoes to authenticated;
+create policy prod_comp_ler on public.prod_competencias for select to authenticated using ((select app.sessao_ok()) and (select app.tem_modulo('produtividade')));
+create policy prod_av_ler on public.prod_avaliacoes for select to authenticated using ((select app.pode_ver_avaliacao(id)));
+create policy prod_notas_ler on public.prod_notas for select to authenticated using ((select app.pode_ver_avaliacao(avaliacao_id)));
+create policy prod_provas_ler on public.prod_provas for select to authenticated using ((select app.pode_ver_avaliacao(avaliacao_id)));
+create policy prod_recursos_ler on public.prod_recursos for select to authenticated using ((select app.pode_ver_avaliacao(avaliacao_id)));
+create policy prod_hist_ler on public.prod_historico for select to authenticated using ((select app.pode_ver_avaliacao(avaliacao_id)));
+create policy prod_apuracoes_ler on public.prod_apuracoes for select to authenticated using (
+  (select app.gestor_geral()) or servidor_id = (select app.servidor_atual())
+  or exists (select 1 from public.prod_avaliacoes a where a.competencia = prod_apuracoes.competencia and a.servidor_id = prod_apuracoes.servidor_id and app.pode_ver_avaliacao(a.id)));
+create policy prod_enc_ler on public.prod_encaminhamentos for select to authenticated using ((select app.gestor_geral()) or (select app.tem_designacao('homologacao')));
+create policy prod_corr_ler on public.prod_correcoes for select to authenticated using (
+  (select app.gestor_geral()) or exists (select 1 from public.prod_avaliacoes a where a.id = prod_correcoes.avaliacao_id and app.pode_ver_avaliacao(a.id)));
+
+-- uuid do caminho sem erro de conversão (SQL não garante a ordem do AND)
+create or replace function app.uuid_seguro(t text)
+returns uuid language sql immutable set search_path = ''
+as $$ select case when t ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then t::uuid end $$;
+grant execute on function app.uuid_seguro(text) to authenticated;
+
+-- arquivos (provas, ciência por outro meio, recurso, metas/arrecadação): bucket privado
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('produtividade', 'produtividade', false, 20971520, array['application/pdf', 'image/png', 'image/jpeg',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+create policy produtividade_enviar on storage.objects for insert to authenticated with check (
+  bucket_id = 'produtividade' and (
+    (name ~ '^avaliacoes/[0-9a-f-]{36}/[0-9a-f-]{36}\.(pdf|png|jpg|docx|xlsx)$' and coalesce((select app.pode_ver_avaliacao(app.uuid_seguro(split_part(name, '/', 2)))), false))
+    or (name ~ '^institucional/[0-9a-f-]{36}\.(pdf|png|jpg|docx|xlsx)$' and (select app.gere_institucional()))));
+create policy produtividade_ler on storage.objects for select to authenticated using (
+  bucket_id = 'produtividade' and (
+    (name like 'avaliacoes/%' and coalesce((select app.pode_ver_avaliacao(app.uuid_seguro(split_part(name, '/', 2)))), false))
+    or (name like 'institucional/%' and (select app.sessao_ok()) and ((select app.tem_modulo('produtividade')) or (select app.gere_institucional())))));
+
+create or replace function app.prod_hist(p_av uuid, p_acao text, p_det jsonb default '{}'::jsonb)
+returns void language sql security definer set search_path = ''
+as $$ insert into public.prod_historico (avaliacao_id, ator_id, acao, detalhes) values (p_av, auth.uid(), p_acao, coalesce(p_det, '{}'::jsonb)) $$;
+
+-- ===== cálculo (adendo 5) =====
+-- dias de exercício elegível no período: dentro da entrada/saída na SEMFAZ, menos afastamentos que não contam
+create or replace function app.prod_dias_elegiveis(p_servidor uuid, p_ini date, p_fim date, p_afast jsonb)
+returns integer language sql stable security definer set search_path = ''
+as $$
+  select count(*)::int from generate_series(p_ini, p_fim, interval '1 day') g, public.servidores s
+   where s.id = p_servidor
+     and (s.data_entrada_semfaz is null or g::date >= s.data_entrada_semfaz)
+     and (s.data_saida_semfaz is null or g::date <= s.data_saida_semfaz)
+     and not exists (select 1 from public.afastamentos a where a.servidor_id = p_servidor and a.status = 'aprovado'
+                       and g::date between a.inicio and a.fim and not coalesce((p_afast ->> a.tipo::text)::boolean, false))
+$$;
+
+-- resultado institucional que vale para o mês: último homologado até o fechamento da competência; sem nenhum = transição
+create or replace function app.prod_institucional_do_mes(p_comp date)
+returns public.prod_resultados_inst language sql stable security definer set search_path = ''
+as $$
+  select r.* from public.prod_resultados_inst r, public.prod_competencias c
+   where c.competencia = p_comp and r.status = 'homologado' and r.homologado_em::date <= c.fechamento
+   order by r.homologado_em desc limit 1
+$$;
+
+-- nota total, enquadramento (sem fração), mínimos cumulativos, faixa e proporcionalidade
+create or replace function app.prod_enquadrar(p_regra uuid, p_funcional numeric, p_institucional numeric, p_dias integer, p_dias_mes integer)
+returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+declare r public.prod_regras; v_trans boolean := p_institucional is null; v_total numeric; v_enq integer; v_pct numeric := 0; v_ok_f boolean; v_ok_t boolean; v_motivo text;
+begin
+  select * into r from public.prod_regras where id = p_regra;
+  v_total := case when v_trans then p_funcional / r.max_funcional * 100 else p_funcional + p_institucional end;
+  v_enq := floor(v_total)::int;                                   -- despreza a fração (69,99 → 69)
+  v_ok_f := p_funcional >= r.minimo_funcional;
+  v_ok_t := v_enq >= r.minimo_total;
+  if v_ok_f and v_ok_t then
+    select coalesce((x ->> 'percentual')::numeric, 0) into v_pct from jsonb_array_elements(r.faixas) x
+     where v_enq between (x ->> 'de')::numeric and (x ->> 'ate')::numeric;
+    v_pct := coalesce(v_pct, 0);
+  else
+    v_motivo := concat_ws(' e ', case when not v_ok_f then format('pontuação funcional abaixo de %s', r.minimo_funcional) end,
+                                case when not v_ok_t then format('nota abaixo de %s', r.minimo_total) end);
+  end if;
+  return jsonb_build_object(
+    'regra_versao', r.versao, 'transicao', v_trans,
+    'pontos_funcionais', p_funcional, 'pontos_institucionais', p_institucional,
+    'nota_total', round(v_total, 4), 'nota_enquadramento', v_enq,
+    'minimo_funcional_atingido', v_ok_f, 'minimo_total_atingido', v_ok_t, 'motivo_zero', v_motivo,
+    'percentual', v_pct, 'dias_elegiveis', p_dias, 'dias_mes', p_dias_mes,
+    'fator', case when p_dias_mes > 0 then round(p_dias::numeric / p_dias_mes, 4) else 0 end,
+    'percentual_efetivo', case when p_dias_mes > 0 then round(v_pct * p_dias / p_dias_mes, 4) else 0 end);
+end $$;
+
+-- apuração do mês do servidor: média ponderada pelos dias elegíveis de cada período (art. 14 § 2º)
+create or replace function app.prod_apurar(p_comp date, p_servidor uuid)
+returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+declare c public.prod_competencias; r public.prod_regras; a record; v_dias integer := 0; v_soma numeric := 0; v_periodos jsonb := '[]'::jsonb;
+        v_dias_p integer; v_tot numeric; v_inst public.prod_resultados_inst; v_dias_mes integer; v_func numeric; v jsonb; v_venc numeric;
+begin
+  select * into c from public.prod_competencias where competencia = p_comp;
+  select * into r from public.prod_regras where id = c.regra_id;
+  v_dias_mes := extract(day from (p_comp + interval '1 month' - interval '1 day'))::int;
+  for a in select av.*, (select sum(n.nota) from public.prod_notas n where n.avaliacao_id = av.id) as soma_notas
+             from public.prod_avaliacoes av where av.competencia = p_comp and av.servidor_id = p_servidor and av.status <> 'retificada' order by av.periodo_inicio loop
+    v_dias_p := app.prod_dias_elegiveis(p_servidor, a.periodo_inicio, a.periodo_fim, r.afastamentos_exercicio);
+    v_tot := coalesce(a.soma_notas, 0);
+    v_dias := v_dias + v_dias_p;
+    v_soma := v_soma + v_tot * v_dias_p;
+    v_periodos := v_periodos || jsonb_build_object('avaliacao_id', a.id, 'inicio', a.periodo_inicio, 'fim', a.periodo_fim, 'status', a.status,
+                                                    'pontos', v_tot, 'dias_elegiveis', v_dias_p, 'avaliador', (select nome_completo from public.servidores where id = a.avaliador_id));
+  end loop;
+  v_func := case when v_dias > 0 then trunc(v_soma / v_dias, 2) else 0 end;   -- média ponderada, sem arredondar para cima
+  v_inst := app.prod_institucional_do_mes(p_comp);
+  v := app.prod_enquadrar(c.regra_id, v_func, v_inst.pontos, v_dias, v_dias_mes)
+       || jsonb_build_object('competencia', p_comp, 'servidor_id', p_servidor, 'periodos', v_periodos,
+                             'institucional', case when v_inst.id is null then null else jsonb_build_object('ano', v_inst.ano, 'quadrimestre', v_inst.quadrimestre,
+                                                    'pontos', v_inst.pontos, 'homologado_em', v_inst.homologado_em, 'memoria', v_inst.memoria) end);
+  if coalesce((select (valor)::boolean from public.configuracoes where chave = 'produtividade.calcular_valor'), false) then
+    select vencimento_basico into v_venc from public.prod_vencimentos where servidor_id = p_servidor and competencia = p_comp;
+    v := v || jsonb_build_object('vencimento_basico', v_venc, 'valor', case when v_venc is null then null else round(v_venc * (v ->> 'percentual_efetivo')::numeric / 100, 2) end);
+  end if;
+  return v;
+end $$;
+
+-- demonstrativo (Anexo II): congelado se homologado; ao vivo enquanto não
+create or replace function public.prod_demonstrativo(p_comp date, p_servidor uuid)
+returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+declare v jsonb; s record;
+begin
+  -- coalesce: servidor nulo/inexistente nunca libera (NULL não pode virar "permitido")
+  if p_servidor is null or not coalesce(app.gestor_geral() or (p_servidor = app.servidor_atual() and app.sessao_ok())
+          or exists (select 1 from public.prod_avaliacoes a where a.competencia = p_comp and a.servidor_id = p_servidor and app.pode_ver_avaliacao(a.id)), false) then
+    perform app.erro('Acesso não permitido.', '42501');
+  end if;
+  if p_servidor = app.servidor_atual() and not app.gestor_geral()
+     and not exists (select 1 from public.prod_avaliacoes a where a.competencia = p_comp and a.servidor_id = p_servidor and a.status <> 'rascunho') then
+    perform app.erro('Avaliação ainda não enviada.', 'P0002');
+  end if;
+  select dados into v from public.prod_apuracoes where competencia = p_comp and servidor_id = p_servidor order by versao desc limit 1;
+  if v is null then v := app.prod_apurar(p_comp, p_servidor) || jsonb_build_object('provisorio', true); end if;
+  select sv.nome_completo, sv.matricula, cg.nome cargo, un.sigla unidade into s
+    from public.servidores sv left join public.cargos cg on cg.id = sv.cargo_id left join public.unidades un on un.id = sv.unidade_id where sv.id = p_servidor;
+  return v || jsonb_build_object('servidor', s.nome_completo, 'matricula', s.matricula, 'cargo', s.cargo, 'unidade', s.unidade);
+end $$;
+
+grant execute on function public.prod_demonstrativo(date, uuid) to authenticated;
+revoke execute on function app.prod_apurar(date, uuid), app.prod_enquadrar(uuid, numeric, numeric, integer, integer), app.prod_dias_elegiveis(uuid, date, date, jsonb) from public, anon, authenticated;
+
+-- ===================== 20261201000400_fase5_fluxo.sql =====================
+-- Fase 5 · fluxo do ciclo mensal (adendo 6): abertura → rascunho → enviada → ciente → (recurso) → homologação → SEMAD
+
+create or replace function app.prod_regra_da(p_av uuid)
+returns public.prod_regras language sql stable security definer set search_path = ''
+as $$ select r.* from public.prod_avaliacoes a join public.prod_competencias c on c.competencia = a.competencia join public.prod_regras r on r.id = c.regra_id where a.id = p_av $$;
+
+create or replace function app.prod_av(p_id uuid)
+returns public.prod_avaliacoes language plpgsql stable security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes;
+begin
+  select * into a from public.prod_avaliacoes where id = p_id;
+  if not found then perform app.erro('Avaliação não encontrada.', 'P0002'); end if;
+  return a;
+end $$;
+
+create or replace function app.prod_eh_avaliador(a public.prod_avaliacoes)
+returns boolean language sql stable security definer set search_path = ''
+as $$ select app.sessao_ok() and a.avaliador_id is not null and a.avaliador_id = app.servidor_atual() and a.servidor_id <> app.servidor_atual() $$;
+
+create or replace function app.prod_avisar(p_servidor uuid, p_titulo text, p_texto text, p_av uuid)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare v_u uuid := app.usuario_do_servidor(p_servidor);
+begin
+  if v_u is not null then
+    perform app.notificar(v_u, 'produtividade', p_titulo, p_texto, case when p_av is null then '/produtividade' else '/produtividade/avaliacao?id=' || p_av end);
+  end if;
+end $$;
+
+-- ===== abertura do ciclo (Secretária/Admin) =====
+create or replace function public.prod_abrir_competencia(p_comp date, p_fechamento date default null)
+returns integer language plpgsql security definer set search_path = ''
+as $$
+declare v_comp date := date_trunc('month', p_comp)::date; v_fim date; v_regra uuid; s record; n integer := 0; v_id uuid;
+begin
+  if not app.gestor_geral() then perform app.erro('Somente a Secretária ou o Administrador do sistema.', '42501'); end if;
+  v_fim := (v_comp + interval '1 month' - interval '1 day')::date;
+  if v_comp > date_trunc('month', current_date)::date then perform app.erro('Só é possível abrir o mês atual ou meses anteriores.', '22023'); end if;
+  v_regra := app.regra_vigente(v_comp);
+  if v_regra is null then perform app.erro('Não há regra de produtividade vigente para essa competência.', '22023'); end if;
+  insert into public.prod_competencias (competencia, regra_id, fechamento, aberta_por)
+  values (v_comp, v_regra, coalesce(p_fechamento, (v_fim + 10)), auth.uid())
+  on conflict (competencia) do nothing;
+  if exists (select 1 from public.prod_competencias where competencia = v_comp and status = 'encaminhada') then
+    perform app.erro('Competência já encaminhada à SEMAD.', '22023');
+  end if;
+  -- só elegíveis (efetivo e carreira não excluída), ativos e em exercício na SEMFAZ no mês; não duplica
+  for s in select sv.* from public.servidores sv
+            where sv.situacao = 'ativo' and app.elegivel_adicional(sv.id)
+              and (sv.data_entrada_semfaz is null or sv.data_entrada_semfaz <= v_fim)
+              and (sv.data_saida_semfaz is null or sv.data_saida_semfaz >= v_comp)
+              and not exists (select 1 from public.prod_avaliacoes a where a.competencia = v_comp and a.servidor_id = sv.id and a.status <> 'retificada') loop
+    insert into public.prod_avaliacoes (competencia, servidor_id, periodo_inicio, periodo_fim, unidade_id, avaliador_id)
+    values (v_comp, s.id, greatest(v_comp, coalesce(s.data_entrada_semfaz, v_comp)), least(v_fim, coalesce(s.data_saida_semfaz, v_fim)), s.unidade_id, app.chefia_imediata(s.id))
+    returning id into v_id;
+    perform app.prod_hist(v_id, 'aberta', jsonb_build_object('avaliador', (select nome_completo from public.servidores where id = app.chefia_imediata(s.id))));
+    n := n + 1;
+  end loop;
+  for s in select distinct a.avaliador_id from public.prod_avaliacoes a where a.competencia = v_comp and a.status = 'rascunho' and a.avaliador_id is not null loop
+    perform app.prod_avisar(s.avaliador_id, 'Avaliações de desempenho abertas', 'Competência ' || to_char(v_comp, 'MM/YYYY'), null);
+  end loop;
+  return n;
+end $$;
+
+-- mudança de unidade/atribuições no mês: avaliação parcial por período (art. 14 § 2º)
+create or replace function public.prod_dividir_periodo(p_id uuid, p_a_partir date, p_avaliador uuid, p_unidade uuid default null)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id); v_id uuid;
+begin
+  if not app.gestor_geral() then perform app.erro('Somente a Secretária ou o Administrador do sistema.', '42501'); end if;
+  if a.status <> 'rascunho' then perform app.erro('Só é possível dividir avaliação em rascunho.', '22023'); end if;
+  if p_a_partir <= a.periodo_inicio or p_a_partir > a.periodo_fim then perform app.erro('Data de divisão fora do período.', '22023'); end if;
+  update public.prod_avaliacoes set periodo_fim = p_a_partir - 1 where id = p_id;
+  insert into public.prod_avaliacoes (competencia, servidor_id, periodo_inicio, periodo_fim, unidade_id, avaliador_id)
+  values (a.competencia, a.servidor_id, p_a_partir, a.periodo_fim, coalesce(p_unidade, a.unidade_id), p_avaliador)
+  returning id into v_id;
+  perform app.prod_hist(p_id, 'periodo_dividido', jsonb_build_object('ate', p_a_partir - 1));
+  perform app.prod_hist(v_id, 'periodo_criado', jsonb_build_object('de', p_a_partir));
+  return v_id;
+exception when check_violation then perform app.erro('Avaliador inválido (ninguém avalia a si mesmo).', '23514');
+end $$;
+
+-- troca da chefia que avalia (exceções): Secretária/Admin, só em rascunho
+create or replace function public.prod_trocar_avaliador(p_id uuid, p_avaliador uuid)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id);
+begin
+  if not app.gestor_geral() then perform app.erro('Somente a Secretária ou o Administrador do sistema.', '42501'); end if;
+  if a.status <> 'rascunho' then perform app.erro('Só em rascunho.', '22023'); end if;
+  update public.prod_avaliacoes set avaliador_id = p_avaliador where id = p_id;
+  perform app.prod_hist(p_id, 'avaliador_trocado', jsonb_build_object('avaliador', (select nome_completo from public.servidores where id = p_avaliador)));
+exception when check_violation then perform app.erro('Ninguém avalia a si mesmo.', '23514');
+end $$;
+
+-- ===== formulário (chefia imediata) =====
+create or replace function public.prod_salvar_avaliacao(p_id uuid, p_notas jsonb, p_limitacoes text default null)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id); x jsonb;
+begin
+  if not app.prod_eh_avaliador(a) then perform app.erro('Somente a chefia imediata que avalia.', '42501'); end if;
+  if a.status <> 'rascunho' then perform app.erro('A avaliação já foi enviada.', '22023'); end if;
+  for x in select * from jsonb_array_elements(coalesce(p_notas, '[]'::jsonb)) loop
+    insert into public.prod_notas (avaliacao_id, indicador, nota, justificativa, equivalente, justificativa_equivalente)
+    values (p_id, x ->> 'indicador', nullif(x ->> 'nota', '')::numeric, nullif(btrim(coalesce(x ->> 'justificativa', '')), ''),
+            coalesce((x ->> 'equivalente')::boolean, false), nullif(btrim(coalesce(x ->> 'justificativa_equivalente', '')), ''))
+    on conflict (avaliacao_id, indicador) do update set nota = excluded.nota, justificativa = excluded.justificativa,
+      equivalente = excluded.equivalente, justificativa_equivalente = excluded.justificativa_equivalente;
+  end loop;
+  update public.prod_avaliacoes set limitacoes = nullif(btrim(coalesce(p_limitacoes, '')), ''),
+    total_funcional = (select sum(nota) from public.prod_notas where avaliacao_id = p_id) where id = p_id;
+exception
+  when invalid_text_representation then perform app.erro('Nota inválida.', '22023');
+  when numeric_value_out_of_range then perform app.erro('Nota fora do limite.', '23514');
+end $$;
+
+-- prova: registro do sistema (demanda, etapa, mensagem do servidor no período), anexo ou referência externa
+create or replace function public.prod_adicionar_prova(p_id uuid, p_indicador text, p_tipo text, p_ref uuid default null, p_descricao text default null,
+                                                       p_path text default null, p_nome text default null)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id); v_id uuid; v_ok boolean;
+begin
+  if not app.prod_eh_avaliador(a) then perform app.erro('Somente a chefia imediata que avalia.', '42501'); end if;
+  if p_tipo = 'demanda' then
+    v_ok := exists (select 1 from public.demanda_responsaveis r where r.demanda_id = p_ref and r.servidor_id = a.servidor_id);
+  elsif p_tipo = 'checklist' then
+    v_ok := exists (select 1 from public.demanda_checklist c join public.demanda_responsaveis r on r.demanda_id = c.demanda_id
+                     where c.id = p_ref and r.servidor_id = a.servidor_id);
+  elsif p_tipo = 'mensagem' then
+    v_ok := exists (select 1 from public.demanda_mensagens m join public.demanda_responsaveis r on r.demanda_id = m.demanda_id
+                     where m.id = p_ref and r.servidor_id = a.servidor_id);
+  elsif p_tipo = 'anexo' then
+    v_ok := p_path like 'avaliacoes/' || p_id::text || '/%' and exists (select 1 from storage.objects o where o.bucket_id = 'produtividade' and o.name = p_path);
+  else
+    v_ok := p_tipo = 'externa';
+  end if;
+  if not coalesce(v_ok, false) then perform app.erro('Prova inválida: o registro precisa ser do servidor avaliado.', '22023'); end if;
+  if not exists (select 1 from jsonb_array_elements((app.prod_regra_da(p_id)).indicadores) x where x ->> 'codigo' = p_indicador) then
+    perform app.erro('Indicador inexistente.', '22023');
+  end if;
+  insert into public.prod_provas (avaliacao_id, indicador, tipo, ref_id, path, nome, descricao, criado_por)
+  values (p_id, p_indicador, p_tipo, p_ref, p_path, left(p_nome, 200), nullif(btrim(coalesce(p_descricao, '')), ''), auth.uid())
+  returning id into v_id;
+  return v_id;
+exception when check_violation then perform app.erro('Prova incompleta (referência externa precisa de descrição).', '23514');
+end $$;
+
+create or replace function public.prod_remover_prova(p_prova uuid)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare v_av uuid := (select avaliacao_id from public.prod_provas where id = p_prova);
+begin
+  if v_av is null or not app.prod_eh_avaliador(app.prod_av(v_av)) then perform app.erro('Somente a chefia imediata que avalia.', '42501'); end if;
+  delete from public.prod_provas where id = p_prova;
+end $$;
+
+-- envio: todos os indicadores pontuados, justificados e provados (validação no banco)
+create or replace function app.prod_pendencias_envio(p_id uuid)
+returns text[] language sql stable security definer set search_path = ''
+as $$
+  select coalesce(array_agg(msg order by ordem), '{}') from (
+    select x.ordinality ordem, x.value ->> 'codigo' || ': ' ||
+      case when n.nota is null then 'sem nota'
+           when length(btrim(coalesce(n.justificativa, ''))) < 10 then 'sem justificativa (mín. 10 caracteres)'
+           when n.equivalente and length(btrim(coalesce(n.justificativa_equivalente, ''))) < 10 then 'critério equivalente sem justificativa'
+           when not exists (select 1 from public.prod_provas p where p.avaliacao_id = p_id and p.indicador = x.value ->> 'codigo') then 'sem prova'
+      end msg
+      from jsonb_array_elements((app.prod_regra_da(p_id)).indicadores) with ordinality x
+      left join public.prod_notas n on n.avaliacao_id = p_id and n.indicador = x.value ->> 'codigo'
+  ) t where msg is not null
+$$;
+
+create or replace function public.prod_enviar(p_id uuid)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id); v_pend text[];
+begin
+  if not app.prod_eh_avaliador(a) then perform app.erro('Somente a chefia imediata que avalia.', '42501'); end if;
+  if a.status <> 'rascunho' then perform app.erro('A avaliação já foi enviada.', '22023'); end if;
+  v_pend := app.prod_pendencias_envio(p_id);
+  if cardinality(v_pend) > 0 then perform app.erro('Não é possível enviar: ' || array_to_string(v_pend, '; ') || '.', '22023'); end if;
+  update public.prod_avaliacoes set status = 'enviada', enviada_em = now(), devolucao_motivo = null,
+    total_funcional = (select sum(nota) from public.prod_notas where avaliacao_id = p_id) where id = p_id;
+  perform app.prod_hist(p_id, 'enviada', jsonb_build_object('total', (select sum(nota) from public.prod_notas where avaliacao_id = p_id)));
+  perform app.prod_avisar(a.servidor_id, 'Avaliação de desempenho para ciência', 'Competência ' || to_char(a.competencia, 'MM/YYYY'), p_id);
+end $$;
+
+-- ===== ciência (art. 16) e recurso =====
+create or replace function public.prod_dar_ciencia(p_id uuid)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id); r public.prod_regras := app.prod_regra_da(p_id);
+begin
+  if not app.sessao_ok() or a.servidor_id is distinct from app.servidor_atual() then perform app.erro('Somente o próprio servidor dá ciência.', '42501'); end if;
+  if a.status <> 'enviada' then perform app.erro('Avaliação não está aguardando ciência.', '22023'); end if;
+  update public.prod_avaliacoes set status = 'ciente', ciente_em = now(), ciencia_meio = 'sistema', ciencia_registrada_por = auth.uid(),
+    prazo_recurso = public.somar_dias_uteis(current_date, coalesce((r.prazos ->> 'recurso')::int, 5)) where id = p_id;
+  perform app.prod_hist(p_id, 'ciente', jsonb_build_object('meio', 'sistema'));
+end $$;
+
+create or replace function public.prod_ciencia_outro_meio(p_id uuid, p_data date, p_anexo text)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id); r public.prod_regras := app.prod_regra_da(p_id);
+begin
+  if not (app.prod_eh_avaliador(a) or app.gestor_geral()) then perform app.erro('Somente a chefia que avaliou ou a Secretária.', '42501'); end if;
+  if a.status <> 'enviada' then perform app.erro('Avaliação não está aguardando ciência.', '22023'); end if;
+  if p_data is null or p_data > current_date or p_data < a.enviada_em::date then perform app.erro('Data da ciência inválida.', '22023'); end if;
+  if p_anexo is null or p_anexo not like 'avaliacoes/' || p_id::text || '/%' or not exists (select 1 from storage.objects o where o.bucket_id = 'produtividade' and o.name = p_anexo) then
+    perform app.erro('Anexe o documento assinado da ciência.', '22023');
+  end if;
+  update public.prod_avaliacoes set status = 'ciente', ciente_em = p_data::timestamptz, ciencia_meio = 'outro_meio', ciencia_anexo = p_anexo, ciencia_registrada_por = auth.uid(),
+    prazo_recurso = public.somar_dias_uteis(p_data, coalesce((r.prazos ->> 'recurso')::int, 5)) where id = p_id;
+  perform app.prod_hist(p_id, 'ciente', jsonb_build_object('meio', 'outro_meio', 'data', p_data));
+end $$;
+
+create or replace function public.prod_recorrer(p_id uuid, p_razoes text, p_anexo text default null)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id); r public.prod_regras := app.prod_regra_da(p_id); v_id uuid; v_rev uuid;
+begin
+  if not app.sessao_ok() or a.servidor_id is distinct from app.servidor_atual() then perform app.erro('Somente o próprio servidor pode recorrer.', '42501'); end if;
+  if a.status <> 'ciente' or a.prazo_recurso is null or current_date > a.prazo_recurso then
+    perform app.erro('Fora do prazo de recurso.', '22023');
+  end if;
+  if p_anexo is not null and (p_anexo not like 'avaliacoes/' || p_id::text || '/%' or not exists (select 1 from storage.objects o where o.bucket_id = 'produtividade' and o.name = p_anexo)) then
+    perform app.erro('Anexo inválido.', '22023');
+  end if;
+  -- autoridade revisora designada, sem conflito com o avaliado nem com quem avaliou
+  select d.usuario_id into v_rev from public.prod_designacoes d join public.usuarios u on u.id = d.usuario_id
+   where d.papel = 'revisora' and u.ativo and d.inicio <= current_date and (d.fim is null or d.fim >= current_date)
+     and d.usuario_id is distinct from auth.uid() and d.usuario_id is distinct from app.usuario_do_servidor(a.avaliador_id)
+   order by d.inicio limit 1;
+  insert into public.prod_recursos (avaliacao_id, razoes, anexo_path, prazo_revisao, revisor_id)
+  values (p_id, btrim(p_razoes), p_anexo, public.somar_dias_uteis(current_date, coalesce((r.prazos ->> 'revisao')::int, 10)), v_rev)
+  returning id into v_id;
+  update public.prod_avaliacoes set status = 'em_recurso' where id = p_id;
+  perform app.prod_hist(p_id, 'recurso', '{}'::jsonb);
+  if v_rev is not null then
+    perform app.notificar(v_rev, 'produtividade', 'Recurso de avaliação para decidir', 'Competência ' || to_char(a.competencia, 'MM/YYYY'), '/produtividade/avaliacao?id=' || p_id);
+  else
+    perform app.notificar(u.id, 'produtividade', 'Recurso sem autoridade revisora designada', 'Designe a autoridade revisora em Produtividade › Configuração', '/produtividade')
+      from public.usuarios u where u.ativo and u.perfil in ('secretaria', 'administrador');
+  end if;
+  return v_id;
+exception when check_violation then perform app.erro('Escreva as razões do recurso (mín. 10 caracteres).', '23514');
+end $$;
+
+-- revisão: decisão fundamentada; alteração de indicador sempre com justificativa
+create or replace function public.prod_decidir_recurso(p_id uuid, p_fundamentacao text, p_notas jsonb default '[]'::jsonb)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id); rc public.prod_recursos; x jsonb; v_antes jsonb;
+begin
+  if not (app.sessao_ok() and app.tem_designacao('revisora')) then perform app.erro('Somente a autoridade revisora designada.', '42501'); end if;
+  if a.status <> 'em_recurso' then perform app.erro('Avaliação não está em recurso.', '22023'); end if;
+  select * into rc from public.prod_recursos where avaliacao_id = p_id and decidido_em is null order by criado_em desc limit 1;
+  if rc.revisor_id is not null and rc.revisor_id <> auth.uid() then perform app.erro('Recurso dirigido a outra autoridade revisora.', '42501'); end if;
+  if length(btrim(coalesce(p_fundamentacao, ''))) < 20 then perform app.erro('Decisão fundamentada obrigatória (mín. 20 caracteres).', '22023'); end if;
+  update public.prod_recursos set revisor_id = auth.uid() where id = rc.id;   -- segregação conferida pelo trigger
+  select jsonb_object_agg(indicador, jsonb_build_object('nota', nota, 'justificativa', justificativa)) into v_antes from public.prod_notas where avaliacao_id = p_id;
+  for x in select * from jsonb_array_elements(coalesce(p_notas, '[]'::jsonb)) loop
+    if length(btrim(coalesce(x ->> 'justificativa', ''))) < 10 then perform app.erro('Cada indicador alterado precisa de justificativa.', '22023'); end if;
+    update public.prod_notas set nota = (x ->> 'nota')::numeric, justificativa = btrim(x ->> 'justificativa') where avaliacao_id = p_id and indicador = x ->> 'indicador';
+    if not found then perform app.erro('Indicador inexistente.', '22023'); end if;
+  end loop;
+  update public.prod_recursos set fundamentacao = btrim(p_fundamentacao), decidido_em = now(), notas_antes = v_antes,
+    notas_depois = (select jsonb_object_agg(indicador, jsonb_build_object('nota', nota, 'justificativa', justificativa)) from public.prod_notas where avaliacao_id = p_id)
+   where id = rc.id;
+  update public.prod_avaliacoes set status = 'aguardando_homologacao', total_funcional = (select sum(nota) from public.prod_notas where avaliacao_id = p_id) where id = p_id;
+  perform app.prod_hist(p_id, 'recurso_decidido', jsonb_build_object('alterou', jsonb_array_length(coalesce(p_notas, '[]'::jsonb)) > 0));
+  perform app.prod_avisar(a.servidor_id, 'Recurso decidido', 'Competência ' || to_char(a.competencia, 'MM/YYYY'), p_id);
+exception when invalid_text_representation then perform app.erro('Nota inválida.', '22023');
+end $$;
+
+-- ===== homologação (art. 17): individual ou em lote; devolução com motivo =====
+create or replace function public.prod_homologar(p_ids uuid[])
+returns integer language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid; a public.prod_avaliacoes; n integer := 0; v_ver integer;
+begin
+  if not (app.sessao_ok() and app.tem_designacao('homologacao')) then perform app.erro('Somente a instância de homologação designada.', '42501'); end if;
+  foreach v_id in array coalesce(p_ids, '{}'::uuid[]) loop
+    a := app.prod_av(v_id);
+    if a.status <> 'aguardando_homologacao' then perform app.erro('Há avaliação que não está aguardando homologação.', '22023'); end if;
+    update public.prod_avaliacoes set status = 'homologada', homologada_por = auth.uid(), homologada_em = now() where id = v_id;  -- segregação no trigger
+    perform app.prod_hist(v_id, 'homologada', '{}'::jsonb);
+    -- todos os períodos do servidor homologados: congela o demonstrativo
+    if not exists (select 1 from public.prod_avaliacoes x where x.competencia = a.competencia and x.servidor_id = a.servidor_id and x.status not in ('homologada', 'retificada')) then
+      select coalesce(max(versao), 0) + 1 into v_ver from public.prod_apuracoes where competencia = a.competencia and servidor_id = a.servidor_id;
+      insert into public.prod_apuracoes (competencia, servidor_id, versao, dados)
+      values (a.competencia, a.servidor_id, v_ver, app.prod_apurar(a.competencia, a.servidor_id) || jsonb_build_object('homologado_em', now(), 'versao', v_ver));
+    end if;
+    perform app.prod_avisar(a.servidor_id, 'Avaliação homologada', 'Competência ' || to_char(a.competencia, 'MM/YYYY'), v_id);
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
+create or replace function public.prod_devolver(p_id uuid, p_motivo text)
+returns void language plpgsql security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id);
+begin
+  if not (app.sessao_ok() and app.tem_designacao('homologacao')) then perform app.erro('Somente a instância de homologação designada.', '42501'); end if;
+  if a.status <> 'aguardando_homologacao' then perform app.erro('Avaliação não está aguardando homologação.', '22023'); end if;
+  if length(btrim(coalesce(p_motivo, ''))) < 10 then perform app.erro('Informe o motivo da devolução (mín. 10 caracteres).', '22023'); end if;
+  if a.avaliador_id = app.servidor_atual() or a.servidor_id = app.servidor_atual() then perform app.erro('Segregação de funções.', '42501'); end if;
+  update public.prod_avaliacoes set status = 'rascunho', devolucao_motivo = btrim(p_motivo), enviada_em = null, ciente_em = null, ciencia_meio = null,
+    ciencia_anexo = null, ciencia_registrada_por = null, prazo_recurso = null, sem_recurso_em = null where id = p_id;
+  perform app.prod_hist(p_id, 'devolvida', jsonb_build_object('motivo', btrim(p_motivo)));
+  if a.avaliador_id is not null then perform app.prod_avisar(a.avaliador_id, 'Avaliação devolvida pela homologação', btrim(p_motivo), p_id); end if;
+end $$;
+
+-- ===== retificação depois da homologação (art. 21-23): novo registro ligado ao original =====
+create or replace function public.prod_retificar(p_id uuid, p_justificativa text, p_correcao text default null)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id); v_id uuid;
+begin
+  if not app.gestor_geral() then perform app.erro('Somente a Secretária ou o Administrador do sistema.', '42501'); end if;
+  if a.status <> 'homologada' then perform app.erro('Só avaliação homologada é retificada.', '22023'); end if;
+  if length(btrim(coalesce(p_justificativa, ''))) < 10 then perform app.erro('Justificativa obrigatória (mín. 10 caracteres).', '22023'); end if;
+  update public.prod_avaliacoes set status = 'retificada' where id = p_id;
+  insert into public.prod_avaliacoes (competencia, servidor_id, periodo_inicio, periodo_fim, unidade_id, avaliador_id, limitacoes, retifica_id, retificacao_justificativa)
+  values (a.competencia, a.servidor_id, a.periodo_inicio, a.periodo_fim, a.unidade_id, a.avaliador_id, a.limitacoes, p_id, btrim(p_justificativa))
+  returning id into v_id;
+  insert into public.prod_notas (avaliacao_id, indicador, nota, justificativa, equivalente, justificativa_equivalente)
+  select v_id, indicador, nota, justificativa, equivalente, justificativa_equivalente from public.prod_notas where avaliacao_id = p_id;
+  insert into public.prod_provas (avaliacao_id, indicador, tipo, ref_id, path, nome, descricao, criado_por)
+  select v_id, indicador, tipo, ref_id, path, nome, descricao, criado_por from public.prod_provas where avaliacao_id = p_id;
+  perform app.prod_hist(p_id, 'retificada', jsonb_build_object('nova', v_id, 'justificativa', btrim(p_justificativa)));
+  perform app.prod_hist(v_id, 'retificacao_aberta', jsonb_build_object('original', p_id));
+  if p_correcao is not null then
+    insert into public.prod_correcoes (competencia, servidor_id, avaliacao_id, descricao, nova_avaliacao_id, registrada_por)
+    values (a.competencia, a.servidor_id, p_id, btrim(p_correcao), v_id, auth.uid());
+  end if;
+  if a.avaliador_id is not null then perform app.prod_avisar(a.avaliador_id, 'Avaliação em retificação', btrim(p_justificativa), v_id); end if;
+  return v_id;
+end $$;
+
+-- ===== encaminhamento à SEMAD (art. 19): versão do arquivo registrada =====
+create or replace function public.prod_encaminhar_semad(p_comp date, p_observacao text default null)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_comp date := date_trunc('month', p_comp)::date; v_id uuid; v_ver integer; v_linhas jsonb;
+begin
+  if not app.gestor_geral() then perform app.erro('Somente a Secretária ou o Administrador do sistema.', '42501'); end if;
+  if not exists (select 1 from public.prod_competencias where competencia = v_comp) then perform app.erro('Competência não aberta.', 'P0002'); end if;
+  if exists (select 1 from public.prod_avaliacoes where competencia = v_comp and status not in ('homologada', 'retificada')) then
+    perform app.erro('Há avaliações não homologadas nesta competência.', '22023');
+  end if;
+  select coalesce(jsonb_agg(d.dados || jsonb_build_object('servidor', s.nome_completo, 'matricula', s.matricula, 'cargo', cg.nome, 'unidade', un.sigla) order by s.nome_completo), '[]'::jsonb)
+    into v_linhas
+    from (select distinct on (servidor_id) servidor_id, dados from public.prod_apuracoes where competencia = v_comp order by servidor_id, versao desc) d
+    join public.servidores s on s.id = d.servidor_id left join public.cargos cg on cg.id = s.cargo_id left join public.unidades un on un.id = s.unidade_id;
+  if jsonb_array_length(v_linhas) = 0 then perform app.erro('Nada homologado para encaminhar.', '22023'); end if;
+  select coalesce(max(versao), 0) + 1 into v_ver from public.prod_encaminhamentos where competencia = v_comp;
+  insert into public.prod_encaminhamentos (competencia, versao, linhas, observacao, gerado_por) values (v_comp, v_ver, v_linhas, p_observacao, auth.uid())
+  returning id into v_id;
+  update public.prod_competencias set status = 'encaminhada' where competencia = v_comp;
+  return v_id;
+end $$;
+
+-- inconsistência apontada pela SEMAD: registro de correção ligado (nada é apagado)
+create or replace function public.prod_registrar_inconsistencia(p_comp date, p_servidor uuid, p_descricao text)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare v_id uuid;
+begin
+  if not app.gestor_geral() then perform app.erro('Somente a Secretária ou o Administrador do sistema.', '42501'); end if;
+  insert into public.prod_correcoes (competencia, servidor_id, avaliacao_id, descricao, registrada_por)
+  values (date_trunc('month', p_comp)::date, p_servidor,
+          (select id from public.prod_avaliacoes where competencia = date_trunc('month', p_comp)::date and servidor_id = p_servidor and status = 'homologada' order by periodo_inicio limit 1),
+          btrim(p_descricao), auth.uid())
+  returning id into v_id;
+  return v_id;
+exception when check_violation then perform app.erro('Descreva a inconsistência (mín. 10 caracteres).', '23514');
+end $$;
+
+-- ===== listagens e subsídios =====
+create or replace function public.prod_listar(p_comp date)
+returns table (id uuid, servidor_id uuid, servidor text, matricula text, unidade text, avaliador text, avaliador_id uuid, periodo_inicio date, periodo_fim date,
+               status text, total_funcional numeric, prazo_recurso date, pendencias integer, retifica_id uuid, sou_avaliador boolean)
+language sql stable security definer set search_path = ''
+as $$
+  select a.id, a.servidor_id, s.nome_completo, s.matricula, u.sigla, av.nome_completo, a.avaliador_id, a.periodo_inicio, a.periodo_fim, a.status,
+         a.total_funcional, a.prazo_recurso, case when a.status = 'rascunho' then cardinality(app.prod_pendencias_envio(a.id)) else 0 end, a.retifica_id,
+         a.avaliador_id = app.servidor_atual()
+    from public.prod_avaliacoes a join public.servidores s on s.id = a.servidor_id left join public.unidades u on u.id = a.unidade_id
+    left join public.servidores av on av.id = a.avaliador_id
+   where a.competencia = date_trunc('month', p_comp)::date and app.pode_ver_avaliacao(a.id)
+     and (a.servidor_id <> app.servidor_atual() or app.gestor_geral() or a.status <> 'rascunho')
+   order by u.sigla, s.nome_completo, a.periodo_inicio
+$$;
+
+-- painel de subsídios do mês: SÓ FATOS (adendo 3.2.6); nenhuma nota sugerida
+create or replace function public.prod_subsidios(p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id); v_ini timestamptz; v_fim timestamptz;
+begin
+  if not app.pode_ver_avaliacao(p_id) then perform app.erro('Acesso não permitido.', '42501'); end if;
+  v_ini := (a.periodo_inicio::timestamp at time zone 'America/Maceio'); v_fim := ((a.periodo_fim + 1)::timestamp at time zone 'America/Maceio');
+  return jsonb_build_object(
+    'recebidas', coalesce((select jsonb_agg(jsonb_build_object('id', d.id, 'numero', d.numero, 'titulo', d.titulo) order by d.numero)
+                  from public.demanda_responsaveis r join public.demandas d on d.id = r.demanda_id
+                 where r.servidor_id = a.servidor_id and r.adicionado_em >= v_ini and r.adicionado_em < v_fim and d.status not in ('sugerida', 'recusada', 'cancelada')), '[]'),
+    'concluidas', coalesce((select jsonb_agg(jsonb_build_object('id', d.id, 'numero', d.numero, 'titulo', d.titulo, 'no_prazo', d.prazo is null or (d.concluida_em at time zone 'America/Maceio')::date <= d.prazo,
+                     'dias_uteis', public.dias_uteis_entre((r.adicionado_em at time zone 'America/Maceio')::date, (d.concluida_em at time zone 'America/Maceio')::date)) order by d.numero)
+                  from public.demanda_responsaveis r join public.demandas d on d.id = r.demanda_id
+                 where r.servidor_id = a.servidor_id and d.status = 'concluida' and d.concluida_em >= v_ini and d.concluida_em < v_fim), '[]'),
+    'atrasadas', coalesce((select jsonb_agg(jsonb_build_object('id', d.id, 'numero', d.numero, 'titulo', d.titulo, 'prazo', d.prazo) order by d.prazo)
+                  from public.demanda_responsaveis r join public.demandas d on d.id = r.demanda_id
+                 where r.servidor_id = a.servidor_id and r.ativo and d.prazo is not null and d.prazo between a.periodo_inicio and a.periodo_fim
+                   and (d.status in ('a_fazer', 'em_andamento', 'aguardando_terceiros', 'em_revisao') and d.prazo < current_date
+                        or d.status = 'concluida' and (d.concluida_em at time zone 'America/Maceio')::date > d.prazo)), '[]'),
+    'checklist', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'demanda_id', c.demanda_id, 'texto', c.texto) order by c.feito_em)
+                  from public.demanda_checklist c where c.feito and not c.removido and c.feito_por = app.usuario_do_servidor(a.servidor_id)
+                   and c.feito_em >= v_ini and c.feito_em < v_fim), '[]'),
+    'feedbacks', coalesce((select jsonb_agg(jsonb_build_object('id', m.id, 'demanda_id', m.demanda_id, 'feedback', m.feedback, 'comentario', m.feedback_comentario) order by m.feedback_em)
+                  from public.demanda_mensagens m where m.autor_id = app.usuario_do_servidor(a.servidor_id) and m.feedback is not null
+                   and m.feedback_em >= v_ini and m.feedback_em < v_fim), '[]'),
+    'afastamentos', coalesce((select jsonb_agg(jsonb_build_object('tipo', af.tipo, 'inicio', greatest(af.inicio, a.periodo_inicio), 'fim', least(af.fim, a.periodo_fim),
+                     'dias', least(af.fim, a.periodo_fim) - greatest(af.inicio, a.periodo_inicio) + 1) order by af.inicio)
+                  from public.afastamentos af where af.servidor_id = a.servidor_id and af.status = 'aprovado' and af.inicio <= a.periodo_fim and af.fim >= a.periodo_inicio), '[]')
+  );
+end $$;
+
+-- formulário completo (para a tela e o Anexo I)
+create or replace function public.prod_avaliacao_detalhe(p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+declare a public.prod_avaliacoes := app.prod_av(p_id); r public.prod_regras := app.prod_regra_da(p_id);
+begin
+  if not app.pode_ver_avaliacao(p_id) then perform app.erro('Acesso não permitido.', '42501'); end if;
+  if a.status = 'rascunho' and a.servidor_id = app.servidor_atual() and not app.gestor_geral() then perform app.erro('Avaliação ainda não enviada.', '42501'); end if;
+  return jsonb_build_object(
+    'avaliacao', to_jsonb(a) || jsonb_build_object(
+       'servidor', (select nome_completo from public.servidores where id = a.servidor_id),
+       'matricula', (select matricula from public.servidores where id = a.servidor_id),
+       'cargo', (select cg.nome from public.servidores s join public.cargos cg on cg.id = s.cargo_id where s.id = a.servidor_id),
+       'exerce_comissao', (select exerce_comissao from public.servidores where id = a.servidor_id),
+       'unidade', (select sigla from public.unidades where id = a.unidade_id),
+       'avaliador', (select nome_completo from public.servidores where id = a.avaliador_id),
+       'homologada_por_nome', app.nome_usuario(a.homologada_por),
+       'ciencia_registrada_por_nome', app.nome_usuario(a.ciencia_registrada_por)),
+    'regra', jsonb_build_object('versao', r.versao, 'indicadores', r.indicadores, 'max_funcional', r.max_funcional, 'prazos', r.prazos),
+    'notas', coalesce((select jsonb_agg(to_jsonb(n)) from public.prod_notas n where n.avaliacao_id = p_id), '[]'),
+    'provas', coalesce((select jsonb_agg(to_jsonb(p) || jsonb_build_object('titulo', case p.tipo
+                          when 'demanda' then (select '#' || numero || ' ' || titulo from public.demandas where id = p.ref_id)
+                          when 'checklist' then (select texto from public.demanda_checklist where id = p.ref_id)
+                          when 'mensagem' then (select left(texto, 120) from public.demanda_mensagens where id = p.ref_id)
+                          else coalesce(p.nome, p.descricao) end,
+                        'demanda_id', case p.tipo when 'demanda' then p.ref_id when 'checklist' then (select demanda_id from public.demanda_checklist where id = p.ref_id)
+                                                  when 'mensagem' then (select demanda_id from public.demanda_mensagens where id = p.ref_id) end) order by p.criado_em)
+                       from public.prod_provas p where p.avaliacao_id = p_id), '[]'),
+    'recursos', coalesce((select jsonb_agg(to_jsonb(x) || jsonb_build_object('revisor', app.nome_usuario(x.revisor_id)) order by x.criado_em) from public.prod_recursos x where x.avaliacao_id = p_id), '[]'),
+    'historico', coalesce((select jsonb_agg(jsonb_build_object('em', h.em, 'acao', h.acao, 'detalhes', h.detalhes, 'ator', app.nome_usuario(h.ator_id)) order by h.em) from public.prod_historico h where h.avaliacao_id = p_id), '[]'),
+    'pendencias_envio', to_jsonb(app.prod_pendencias_envio(p_id)),
+    'permissoes', jsonb_build_object(
+       'editar', a.status = 'rascunho' and app.prod_eh_avaliador(a),
+       'ciencia', a.status = 'enviada' and a.servidor_id = app.servidor_atual(),
+       'ciencia_outro_meio', a.status = 'enviada' and (app.prod_eh_avaliador(a) or app.gestor_geral()),
+       'recorrer', a.status = 'ciente' and a.servidor_id = app.servidor_atual() and current_date <= a.prazo_recurso,
+       'decidir_recurso', a.status = 'em_recurso' and app.tem_designacao('revisora') and auth.uid() not in (coalesce(app.usuario_do_servidor(a.servidor_id), gen_random_uuid()), coalesce(app.usuario_do_servidor(a.avaliador_id), gen_random_uuid())),
+       'homologar', a.status = 'aguardando_homologacao' and app.tem_designacao('homologacao'),
+       'retificar', a.status = 'homologada' and app.gestor_geral(),
+       'gerir', app.gestor_geral())
+  );
+end $$;
+
+-- painel do funcionário: "Minha produtividade"
+create or replace function public.prod_minhas()
+returns table (competencia date, avaliacao_id uuid, status text, total_funcional numeric, prazo_recurso date, nota_enquadramento integer, percentual numeric, homologada boolean)
+language sql stable security definer set search_path = ''
+as $$
+  select a.competencia, a.id, a.status, a.total_funcional, a.prazo_recurso,
+         (select (dados ->> 'nota_enquadramento')::int from public.prod_apuracoes p where p.competencia = a.competencia and p.servidor_id = a.servidor_id order by versao desc limit 1),
+         (select (dados ->> 'percentual')::numeric from public.prod_apuracoes p where p.competencia = a.competencia and p.servidor_id = a.servidor_id order by versao desc limit 1),
+         a.status = 'homologada'
+    from public.prod_avaliacoes a
+   where app.sessao_ok() and a.servidor_id = app.servidor_atual() and a.status not in ('rascunho', 'retificada')
+   order by a.competencia desc, a.periodo_inicio desc limit 24
+$$;
+
+-- painéis: só agregados por unidade, sem nome (adendo 8)
+create or replace function public.prod_resumo(p_comp date)
+returns table (unidade text, total integer, rascunho integer, enviada integer, ciente integer, em_recurso integer, aguardando integer, homologada integer)
+language sql stable security definer set search_path = ''
+as $$
+  select u.sigla, count(*)::int, count(*) filter (where a.status = 'rascunho')::int, count(*) filter (where a.status = 'enviada')::int,
+         count(*) filter (where a.status = 'ciente')::int, count(*) filter (where a.status = 'em_recurso')::int,
+         count(*) filter (where a.status = 'aguardando_homologacao')::int, count(*) filter (where a.status = 'homologada')::int
+    from public.prod_avaliacoes a left join public.unidades u on u.id = a.unidade_id
+   where a.competencia = date_trunc('month', p_comp)::date and a.status <> 'retificada' and app.sessao_ok()
+     and (app.gestor_geral() or app.tem_designacao('homologacao') or (app.perfil_atual() in ('diretor', 'coordenador') and app.na_escopo(a.unidade_id)))
+   group by u.sigla order by u.sigla
+$$;
+
+-- ===== rotina diária: prazos e alertas (adendo 6.10) =====
+create or replace function app.prod_alerta_uma_vez(p_av uuid, p_tipo text, p_chave text default '')
+returns boolean language plpgsql security definer set search_path = ''
+as $$
+begin
+  insert into public.prod_alertas (avaliacao_id, tipo, chave) values (p_av, p_tipo, coalesce(p_chave, ''));
+  return true;
+exception when unique_violation then return false;
+end $$;
+
+create or replace function app.rotina_produtividade()
+returns integer language plpgsql security definer set search_path = ''
+as $$
+declare a record; n integer := 0; v_u uuid;
+begin
+  -- prazo de recurso esgotado sem recurso → aguardando homologação
+  for a in select * from public.prod_avaliacoes where status = 'ciente' and prazo_recurso < current_date loop
+    update public.prod_avaliacoes set status = 'aguardando_homologacao', sem_recurso_em = now() where id = a.id;
+    insert into public.prod_historico (avaliacao_id, acao, detalhes) values (a.id, 'sem_recurso', jsonb_build_object('prazo', a.prazo_recurso));
+    n := n + 1;
+  end loop;
+  -- ciência pendente além do prazo → chefia e Secretária
+  for a in select av.*, r.prazos from public.prod_avaliacoes av join public.prod_competencias c on c.competencia = av.competencia join public.prod_regras r on r.id = c.regra_id
+            where av.status = 'enviada' and public.dias_uteis_entre(av.enviada_em::date, current_date) >= coalesce((r.prazos ->> 'ciencia')::int, 3) loop
+    if app.prod_alerta_uma_vez(a.id, 'ciencia_pendente') then
+      perform app.prod_avisar(a.avaliador_id, 'Ciência pendente', 'Servidor ainda não deu ciência; registre por outro meio se preciso', a.id);
+      for v_u in select u.id from public.usuarios u where u.ativo and u.perfil = 'secretaria' loop
+        perform app.notificar(v_u, 'produtividade', 'Ciência pendente', 'Avaliação sem ciência do servidor', '/produtividade/avaliacao?id=' || a.id);
+      end loop;
+    end if;
+  end loop;
+  -- prazo de recurso terminando (último dia) → servidor
+  for a in select * from public.prod_avaliacoes where status = 'ciente' and prazo_recurso = current_date loop
+    if app.prod_alerta_uma_vez(a.id, 'recurso_termina') then perform app.prod_avisar(a.servidor_id, 'Prazo de recurso termina hoje', 'Avaliação de desempenho', a.id); end if;
+  end loop;
+  -- revisão a partir do 8º dia útil → revisora e Secretária
+  for a in select av.id, rc.revisor_id, rc.criado_em, r.prazos from public.prod_avaliacoes av join public.prod_recursos rc on rc.avaliacao_id = av.id and rc.decidido_em is null
+             join public.prod_competencias c on c.competencia = av.competencia join public.prod_regras r on r.id = c.regra_id
+            where av.status = 'em_recurso' and public.dias_uteis_entre(rc.criado_em::date, current_date) >= coalesce((r.prazos ->> 'alerta_revisao')::int, 8) loop
+    if app.prod_alerta_uma_vez(a.id, 'revisao_prazo') then
+      for v_u in select a.revisor_id union select u.id from public.usuarios u where u.ativo and u.perfil = 'secretaria' loop
+        continue when v_u is null;
+        perform app.notificar(v_u, 'produtividade', 'Revisão perto do prazo', 'Recurso aguardando decisão', '/produtividade/avaliacao?id=' || a.id);
+      end loop;
+    end if;
+  end loop;
+  -- rascunho perto do fechamento → chefia (uma vez)
+  for a in select av.* from public.prod_avaliacoes av join public.prod_competencias c on c.competencia = av.competencia join public.prod_regras r on r.id = c.regra_id
+            where av.status = 'rascunho' and c.fechamento - current_date between 0 and coalesce((r.prazos ->> 'alerta_rascunho')::int, 3) loop
+    if app.prod_alerta_uma_vez(a.id, 'rascunho_fechamento') then perform app.prod_avisar(a.avaliador_id, 'Avaliação em rascunho perto do fechamento', 'Envie ao servidor', a.id); end if;
+  end loop;
+  -- competência pronta para homologar → instância de homologação (uma vez por competência)
+  for a in select c.competencia from public.prod_competencias c where c.status = 'aberta'
+             and exists (select 1 from public.prod_avaliacoes x where x.competencia = c.competencia and x.status = 'aguardando_homologacao')
+             and not exists (select 1 from public.prod_avaliacoes x where x.competencia = c.competencia and x.status in ('rascunho', 'enviada', 'ciente', 'em_recurso')) loop
+    if app.prod_alerta_uma_vez('00000000-0000-0000-0000-000000000000', 'competencia_pronta', a.competencia::text) then
+      for v_u in select d.usuario_id from public.prod_designacoes d where d.papel = 'homologacao' and d.inicio <= current_date and (d.fim is null or d.fim >= current_date) loop
+        perform app.notificar(v_u, 'produtividade', 'Competência pronta para homologar', to_char(a.competencia, 'MM/YYYY'), '/produtividade');
+      end loop;
+    end if;
+  end loop;
+  return n;
+end $$;
+
+create or replace function app.rotinas_diarias_demandas()
+returns void language plpgsql security definer set search_path = ''
+as $$ begin perform app.gerar_ocorrencias(); perform app.aplicar_substituicoes(); perform app.rotina_contratos(); perform app.rotina_produtividade(); perform app.avisar_prazos(); end $$;
+revoke execute on function app.rotinas_diarias_demandas(), app.rotina_produtividade() from public, anon, authenticated;
+
+grant execute on function public.prod_abrir_competencia(date, date), public.prod_dividir_periodo(uuid, date, uuid, uuid), public.prod_trocar_avaliador(uuid, uuid),
+  public.prod_salvar_avaliacao(uuid, jsonb, text), public.prod_adicionar_prova(uuid, text, text, uuid, text, text, text), public.prod_remover_prova(uuid),
+  public.prod_enviar(uuid), public.prod_dar_ciencia(uuid), public.prod_ciencia_outro_meio(uuid, date, text), public.prod_recorrer(uuid, text, text),
+  public.prod_decidir_recurso(uuid, text, jsonb), public.prod_homologar(uuid[]), public.prod_devolver(uuid, text), public.prod_retificar(uuid, text, text),
+  public.prod_encaminhar_semad(date, text), public.prod_registrar_inconsistencia(date, uuid, text), public.prod_listar(date), public.prod_subsidios(uuid),
+  public.prod_avaliacao_detalhe(uuid), public.prod_minhas(), public.prod_resumo(date) to authenticated;
+
+-- ===================== 20261201000500_fase5_relatorios.sql =====================
+-- Fase 5 · relatórios da produtividade (adendo 12: Anexo I, Anexo II, arquivo SEMAD e Dossiê do ciclo)
+
+-- resultado por servidor da competência (só quem o perfil pode ver; demonstrativo congelado se homologado)
+create or replace function public.relatorio_produtividade(p_comp date)
+returns table (servidor text, matricula text, unidade text, situacao text, pontos_funcionais numeric, pontos_institucionais numeric, regra text,
+               nota_total numeric, nota_enquadramento integer, percentual numeric, dias_elegiveis integer, dias_mes integer, fator numeric, percentual_efetivo numeric, homologado boolean)
+language plpgsql stable security definer set search_path = ''
+as $$
+declare v_comp date := date_trunc('month', p_comp)::date; s record; d jsonb;
+begin
+  if not app.pode_relatorio('produtividade') then return; end if;
+  for s in select distinct on (a.servidor_id) a.servidor_id, sv.nome_completo, sv.matricula, u.sigla,
+                  (select string_agg(distinct x.status, ', ') from public.prod_avaliacoes x where x.competencia = v_comp and x.servidor_id = a.servidor_id and x.status <> 'retificada') st
+             from public.prod_avaliacoes a join public.servidores sv on sv.id = a.servidor_id left join public.unidades u on u.id = sv.unidade_id
+            where a.competencia = v_comp and a.status <> 'retificada' and app.pode_ver_avaliacao(a.id)
+              and (a.status <> 'rascunho' or app.gestor_geral() or a.avaliador_id = app.servidor_atual())
+            order by a.servidor_id loop
+    select dados into d from public.prod_apuracoes where competencia = v_comp and servidor_id = s.servidor_id order by versao desc limit 1;
+    d := coalesce(d, app.prod_apurar(v_comp, s.servidor_id) || '{"provisorio": true}');
+    return query select s.nome_completo, s.matricula, s.sigla, s.st, (d ->> 'pontos_funcionais')::numeric, (d ->> 'pontos_institucionais')::numeric,
+      case when (d ->> 'transicao')::boolean then 'transição' else 'normal' end, (d ->> 'nota_total')::numeric, (d ->> 'nota_enquadramento')::int,
+      (d ->> 'percentual')::numeric, (d ->> 'dias_elegiveis')::int, (d ->> 'dias_mes')::int, (d ->> 'fator')::numeric, (d ->> 'percentual_efetivo')::numeric,
+      not coalesce((d ->> 'provisorio')::boolean, false);
+  end loop;
+end $$;
+
+-- Dossiê do ciclo (adendo 9): tudo da competência para o Controle Interno — Secretária/Administrador
+create or replace function public.relatorio_dossie(p_comp date)
+returns table (servidor text, matricula text, unidade text, periodo text, chefia text, situacao text, pontos numeric, provas integer, enviada_em timestamptz,
+               ciencia text, recurso text, homologacao text, retificacao text, demonstrativo_versao integer, encaminhamentos text, correcoes integer)
+language plpgsql stable security definer set search_path = ''
+as $$
+declare v_comp date := date_trunc('month', p_comp)::date;
+begin
+  if not (app.pode_relatorio('produtividade') and app.gestor_geral()) then perform app.erro('Somente a Secretária ou o Administrador do sistema.', '42501'); end if;
+  return query
+    select sv.nome_completo, sv.matricula, u.sigla, to_char(a.periodo_inicio, 'DD/MM') || ' a ' || to_char(a.periodo_fim, 'DD/MM/YYYY'),
+           av.nome_completo, a.status, a.total_funcional, (select count(*)::int from public.prod_provas p where p.avaliacao_id = a.id), a.enviada_em,
+           case when a.ciente_em is null then 'pendente' else to_char(a.ciente_em at time zone 'America/Maceio', 'DD/MM/YYYY HH24:MI') || case when a.ciencia_meio = 'outro_meio' then ' (outro meio, com anexo)' else '' end end,
+           coalesce((select string_agg(to_char(r.criado_em at time zone 'America/Maceio', 'DD/MM/YYYY') || case when r.decidido_em is null then ' · pendente' else ' · decidido por ' || coalesce(app.nome_usuario(r.revisor_id), '—') end, '; ')
+                       from public.prod_recursos r where r.avaliacao_id = a.id), case when a.sem_recurso_em is not null then 'sem recurso (prazo esgotado)' else '—' end),
+           case when a.homologada_em is null then 'pendente' else to_char(a.homologada_em at time zone 'America/Maceio', 'DD/MM/YYYY') || ' · ' || coalesce(app.nome_usuario(a.homologada_por), '—') end,
+           case when a.retifica_id is not null then 'retifica avaliação anterior: ' || coalesce(a.retificacao_justificativa, '')
+                when a.status = 'retificada' then 'substituída por retificação' else '—' end,
+           (select max(p.versao) from public.prod_apuracoes p where p.competencia = v_comp and p.servidor_id = a.servidor_id),
+           coalesce((select string_agg('v' || e.versao || ' em ' || to_char(e.gerado_em at time zone 'America/Maceio', 'DD/MM/YYYY'), ', ' order by e.versao) from public.prod_encaminhamentos e where e.competencia = v_comp), '—'),
+           (select count(*)::int from public.prod_correcoes c where c.competencia = v_comp and c.servidor_id = a.servidor_id)
+      from public.prod_avaliacoes a join public.servidores sv on sv.id = a.servidor_id left join public.unidades u on u.id = a.unidade_id
+      left join public.servidores av on av.id = a.avaliador_id
+     where a.competencia = v_comp
+     order by u.sigla, sv.nome_completo, a.periodo_inicio, a.criado_em;
+end $$;
+
+grant execute on function public.relatorio_produtividade(date), public.relatorio_dossie(date) to authenticated;

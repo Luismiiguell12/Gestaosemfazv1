@@ -182,7 +182,7 @@ describe('ciência, recurso, homologação e segregação', () => {
       await c.q('select public.prod_decidir_recurso($1, $2, $3)', [id, 'Recurso parcialmente provido conforme provas', JSON.stringify([{ indicador: 'F1', nota: 20, justificativa: 'Entregas comprovadas no processo 123' }])]);
       await c.como('admin');
       expect(await c.q('select public.prod_homologar($1) as n', [[id]])).toEqual([{ n: 1 }]);
-      const dem = (await c.sistema(`select dados d from public.prod_apuracoes where competencia = $1 and servidor_id = (select id from public.servidores where matricula = '000101')`, [COMP]))[0].d;
+      const dem = (await c.sistema(`select dados d from public.prod_apuracoes where competencia = $1 and servidor_id = (select id from public.servidores where matricula = '000101')`, [COMP]))[0].d as Record<string, unknown>;
       expect([Number(dem.pontos_funcionais), dem.transicao, dem.nota_enquadramento, Number(dem.percentual)]).toEqual([60, true, 85, 24]); // 60/70×100 = 85,71
       // T14: homologada não muda; só retificação
       await c.sistemaFalha(`update public.prod_avaliacoes set total_funcional = 70 where id = $1`, [id], /homologada não pode ser alterada/);
@@ -254,6 +254,28 @@ describe('ciência, recurso, homologação e segregação', () => {
       await c.q(`select public.prod_salvar_meta(2027, 1, 'R1', 110, 'Memória 2027 revista', 'LOA 2027')`);
       await c.como('coordCofit');
       await c.falha(`select public.prod_salvar_meta(2027, 1, 'R2', 100, 'Memória', 'LOA')`, [], /Sem permissão/);
+    });
+  });
+});
+
+describe('relatórios da produtividade', () => {
+  it('relatório por servidor respeita o escopo; dossiê só Secretária/Admin', async () => {
+    await cenario(async (c) => {
+      await abrir(c);
+      const id = await avDe(c, '000101');
+      await preencherEEnviar(c, 'coordCofit', id, { F1: 18, F2: 12, F3: 12, F4: 8, F5: 8 });
+      await c.como('sec');
+      const r = await c.q<{ matricula: string; nota_enquadramento: number; percentual: string; regra: string }>(`select * from public.relatorio_produtividade($1) where matricula = '000101'`, [COMP]);
+      expect(r[0]).toMatchObject({ nota_enquadramento: 82, regra: 'transição' }); // 58/70×100 = 82,85
+      expect(Number(r[0].percentual)).toBe(24);
+      const d = await c.q<{ provas: number; situacao: string }>(`select * from public.relatorio_dossie($1) where matricula = '000101'`, [COMP]);
+      expect(d[0]).toMatchObject({ provas: 5, situacao: 'enviada' });
+      await c.como('coordCofit');
+      const rc = await c.q<{ unidade: string }>(`select * from public.relatorio_produtividade($1)`, [COMP]);
+      expect(new Set(rc.map((x) => x.unidade))).toEqual(new Set(['COFIT']));
+      await c.falha(`select * from public.relatorio_dossie($1)`, [COMP], /Somente a Secretária/);
+      await c.como('funcE');
+      expect((await c.q(`select * from public.relatorio_produtividade($1)`, [COMP])).length).toBe(0);
     });
   });
 });

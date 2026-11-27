@@ -10,6 +10,7 @@ import { useConsulta } from '@/lib/useConsulta';
 import { ABERTOS, ROTULO_ORIGEM_LONGO, ROTULO_STATUS, textoPrazo, TOM_STATUS, type DemandaLista } from '@/lib/demandas';
 import { agruparParaPainel, caminho, type Unidade } from '@/lib/estrutura';
 import { dataCurta, dataExtenso, iniciais, moeda, primeiroNome, quando, saudacao } from '@/lib/formato';
+import { AVISO_DECRETO, nomeCompetencia, num, pct, ROTULO_STATUS_AV, TOM_STATUS_AV, type StatusAv } from '@/lib/produtividade';
 
 export default function PainelPage() {
   return (
@@ -265,7 +266,9 @@ function PainelFuncionario({ info }: { info: InfoSessao }) {
             })}
           </section>
           <section className="cartao">
-            <div className="cartao-topo"><h2>Minha produtividade</h2><span className="texto-suave">Demandas concluídas por mês</span></div>
+            <div className="cartao-topo"><h2>Minha produtividade</h2><Link href="/produtividade">Ver tudo</Link></div>
+            <MinhaAvaliacao />
+            <div className="texto-suave" style={{ marginTop: 12 }}>Demandas concluídas por mês (informação)</div>
             {I && (
               <>
                 <div role="img" aria-label={`Demandas concluídas: ${I.por_mes.map((b) => `${MESES_CURTOS[Number(b.mes.slice(5)) - 1]} ${b.concluidas}`).join(', ')}`} style={{ display: 'flex', alignItems: 'flex-end', gap: 18, height: 170, marginTop: 16, padding: '0 4px', borderBottom: '1px solid var(--cor-borda-campo)' }}>
@@ -279,7 +282,7 @@ function PainelFuncionario({ info }: { info: InfoSessao }) {
                 <div style={{ display: 'flex', gap: 18, padding: '6px 4px 0', fontSize: 12, color: 'var(--cor-texto-suave)' }}>{I.por_mes.map((b) => <span key={b.mes} style={{ flex: 1, textAlign: 'center' }}>{MESES_CURTOS[Number(b.mes.slice(5)) - 1]}</span>)}</div>
               </>
             )}
-            <p className="nota" style={{ marginTop: 14 }}>Os critérios de produtividade seguirão o modelo da carreira dos fiscais, ainda em definição. Os indicadores não são avaliação automática do servidor.</p>
+            <p className="nota" style={{ marginTop: 14 }}>{AVISO_DECRETO}</p>
           </section>
         </div>
         <aside className="col-lateral" style={{ gap: 20 }}>
@@ -303,5 +306,29 @@ function PainelFuncionario({ info }: { info: InfoSessao }) {
       <p className="nota">Você vê só as próprias demandas, a própria agenda e a própria produtividade.</p>
       {sugerir && <SugerirDemanda fechar={() => setSugerir(false)} aoSalvar={() => void dem.recarregar()} />}
     </>
+  );
+}
+
+interface MinhaAv { competencia: string; avaliacao_id: string; status: StatusAv; total_funcional: number | null; prazo_recurso: string | null; nota_enquadramento: number | null; percentual: number | null; homologada: boolean }
+function MinhaAvaliacao() {
+  const r = useConsulta(async () => supabase.rpc('prod_minhas'), []);
+  const L = (r.dados as MinhaAv[] | null) ?? [];
+  if (r.carregando) return null;
+  if (!L.length) return <EstadoVazio>Nenhuma avaliação enviada a você ainda.</EstadoVazio>;
+  const u = L[0];
+  const hoje = new Date().toISOString().slice(0, 10);
+  return (
+    <div style={{ fontSize: 14 }}>
+      <div className="acoes" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <span><strong>{nomeCompetencia(u.competencia)}</strong>: {u.homologada ? <>nota <strong>{u.nota_enquadramento}</strong> · faixa <strong>{pct(u.percentual)}</strong></> : <>{num(u.total_funcional)} pontos funcionais</>}</span>
+        <Selo tom={TOM_STATUS_AV[u.status]}>{ROTULO_STATUS_AV[u.status]}</Selo>
+      </div>
+      <div className="acoes" style={{ marginTop: 8 }}>
+        {u.status === 'enviada' && <Link className="botao botao-primario" href={`/produtividade/avaliacao?id=${u.avaliacao_id}`}>Dar ciência</Link>}
+        {u.status === 'ciente' && u.prazo_recurso && u.prazo_recurso >= hoje && <Link className="botao" href={`/produtividade/avaliacao?id=${u.avaliacao_id}`}>Recorrer (até {dataCurta(u.prazo_recurso)})</Link>}
+        {!['enviada', 'ciente'].includes(u.status) && <Link href={`/produtividade/avaliacao?id=${u.avaliacao_id}`}>Abrir avaliação</Link>}
+      </div>
+      {L.length > 1 && <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 13 }}>{L.slice(1, 6).map((x) => <li key={x.avaliacao_id}><Link href={`/produtividade/avaliacao?id=${x.avaliacao_id}`}>{nomeCompetencia(x.competencia)}</Link>: {x.homologada ? `nota ${x.nota_enquadramento} · ${pct(x.percentual)}` : ROTULO_STATUS_AV[x.status]}</li>)}</ul>}
+    </div>
   );
 }
