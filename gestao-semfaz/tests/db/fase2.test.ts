@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cenario, contar, idServidor, idUnidade, U, type Ctx } from './helpers';
 
-const linha = (n: number, o: Record<string, string>) => ({ linha: n, nome: 'Fulano Teste', matricula: '', cargo: 'Auditor Fiscal', unidade: 'COFIT', email: '', ferias: '30', licenca_premio: '0', folgas: '2', ...o });
+const linha = (n: number, o: Record<string, string>) => ({ linha: n, nome: 'Fulano Teste', matricula: '', cargo: 'Auditor Fiscal', unidade: 'COFIT', email: '', ferias: '30', licenca_premio: '0', folgas: '2', tipo_vinculo: 'efetivo', ...o });
 const previa = (c: Ctx, linhas: object[], fn = 'importar_servidores_previa') =>
   c.q<{ linha: number; campo: string; mensagem: string }>(`select * from public.${fn}($1)`, [JSON.stringify(linhas)]);
 
@@ -213,7 +213,7 @@ describe('folhas de ponto', () => {
     await cenario(async (c) => {
       const cofit = await idUnidade(c, 'COFIT');
       const cargo = (await c.sistema(`select id from public.cargos limit 1`))[0].id;
-      await c.sistema(`insert into public.servidores (nome_completo, matricula, cargo_id, unidade_id) values ('Dup Um', '0777', $1, $2), ('Dup Dois', '777', $1, $2)`, [cargo, cofit]);
+      await c.sistema(`insert into public.servidores (nome_completo, matricula, cargo_id, unidade_id, tipo_vinculo) values ('Dup Um', '0777', $1, $2, 'efetivo'), ('Dup Dois', '777', $1, $2, 'efetivo')`, [cargo, cofit]);
       await c.como('sec');
       const lote = (await c.q<{ id: string }>('select public.criar_lote_folhas($1, $2) as id', ['2026-11-01', JSON.stringify([{ pagina: 1, matricula: '101' }, { pagina: 2, matricula: '777' }])]))[0].id;
       const p = await c.q<{ servidor: string | null }>('select servidor from public.paginas_do_lote($1)', [lote]);

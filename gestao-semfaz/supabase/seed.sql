@@ -29,8 +29,11 @@ insert into public.cargos (nome) values
   ('Secretário(a)'), ('Diretor(a)'), ('Coordenador(a)'), ('Assessor(a)'),
   ('Auditor Fiscal'), ('Agente Administrativo'), ('Analista de Sistemas');
 
-insert into public.servidores (nome_completo, matricula, cargo_id, unidade_id, email_institucional)
-select v.nome, v.mat, c.id, u.id, v.email
+-- vínculo fictício (adendo 01): secretária em cargo só de comissão (não elegível); chefias efetivas em função
+insert into public.servidores (nome_completo, matricula, cargo_id, unidade_id, email_institucional, tipo_vinculo, exerce_comissao)
+select v.nome, v.mat, c.id, u.id, v.email,
+       case when v.mat = '000001' then 'comissionado' else 'efetivo' end::public.tipo_vinculo,
+       v.mat in ('000001', '000010', '000011', '000106', '000206')
   from (values
     ('Secretária Exemplo', '000001', 'Secretário(a)', 'Gabinete', 'secretaria@exemplo.gov.br'),
     ('Administrador Exemplo', '000002', 'Analista de Sistemas', 'ASTIN', 'admin@exemplo.gov.br'),

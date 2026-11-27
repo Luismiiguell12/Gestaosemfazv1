@@ -16,6 +16,9 @@ export const COLUNAS_SERVIDORES: ColunaPlanilha[] = [
   { chave: 'ferias', rotulo: 'saldo de férias', aliases: ['saldo de ferias', 'ferias', 'saldo ferias'], obrigatoria: true },
   { chave: 'licenca_premio', rotulo: 'saldo de licença-prêmio', aliases: ['saldo de licenca premio', 'licenca premio', 'saldo licenca premio'], obrigatoria: true },
   { chave: 'folgas', rotulo: 'saldo de folgas', aliases: ['saldo de folgas', 'folgas', 'saldo folgas'], obrigatoria: true },
+  // adendo 01 (produtividade), seção 2
+  { chave: 'tipo_vinculo', rotulo: 'tipo de vínculo', aliases: ['tipo de vinculo', 'vinculo', 'tipo vinculo'], obrigatoria: true },
+  { chave: 'exerce_comissao', rotulo: 'cargo em comissão/função de confiança', aliases: ['cargo em comissao funcao de confianca', 'cargo em comissao', 'funcao de confianca', 'exerce comissao'], obrigatoria: false },
 ];
 
 export const COLUNAS_SALDOS: ColunaPlanilha[] = [

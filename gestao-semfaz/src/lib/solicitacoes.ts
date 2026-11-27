@@ -1,4 +1,4 @@
-import { ROTULO_ABRANGENCIA, ROTULO_PERFIL, type Perfil } from './validacao';
+import { ROTULO_ABRANGENCIA, ROTULO_PERFIL, ROTULO_VINCULO, type Perfil } from './validacao';
 import { dataCurta, moeda } from './formato';
 
 export type TipoSolicitacao =
@@ -36,6 +36,7 @@ export const ROTULO_CAMPO: Record<string, string> = {
   valor_mensal: 'Valor mensal', dia_vencimento: 'Dia de vencimento', fiscal_servidor_id: 'Fiscal do contrato', indice_reajuste: 'Índice de reajuste',
   mes_database: 'Mês da data-base', encerrado: 'Encerrado', fim_vigencia: 'Fim da vigência', novo_fim: 'Nova vigência até', novo_valor: 'Novo valor mensal',
   data_assinatura: 'Data de assinatura',
+  tipo_vinculo: 'Tipo de vínculo', exerce_comissao: 'Cargo em comissão/função de confiança', carreira_excluida: 'Carreira excluída do adicional',
 };
 
 export const ROTULO_STATUS = { pendente: 'Pendente', aprovada: 'Aprovada', recusada: 'Recusada', bloqueada: 'Bloqueada', cancelada: 'Cancelada' } as const;
@@ -46,7 +47,8 @@ export function formatarValor(campo: string, v: unknown, nomes: { unidades: Map<
   if (campo === 'valor_mensal' || campo === 'novo_valor') return moeda(Number(v));
   if (campo === 'fim_vigencia' || campo === 'novo_fim' || campo === 'data_assinatura') return dataCurta(String(v));
   if (campo === 'fiscal_servidor_id') return nomes.servidores?.get(String(v)) ?? 'Servidor indicado';
-  if (campo === 'encerrado') return v ? 'Sim' : 'Não';
+  if (campo === 'encerrado' || campo === 'exerce_comissao' || campo === 'carreira_excluida') return v ? 'Sim' : 'Não';
+  if (campo === 'tipo_vinculo') return ROTULO_VINCULO[v as keyof typeof ROTULO_VINCULO] ?? String(v);
   if (campo === 'unidade_pai_id' || campo === 'unidade_id' || campo === 'unidade_ocupante_id') return nomes.unidades.get(String(v)) ?? '—';
   if (campo === 'cargo_id') return nomes.cargos.get(String(v)) ?? '—';
   if (campo === 'perfil') return ROTULO_PERFIL[v as Perfil] ?? String(v);

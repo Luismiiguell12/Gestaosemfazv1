@@ -89,7 +89,7 @@ describe('funcionário: leitura, criação, alteração e exclusão diretas pela
       const cofit = await idUnidade(c, 'COFIT');
       const cargo = (await c.sistema(`select id from public.cargos limit 1`))[0].id;
       await c.como('funcA');
-      await c.falha(`insert into public.servidores (nome_completo, matricula, cargo_id, unidade_id) values ('X', '999999', $1, $2)`,
+      await c.falha(`insert into public.servidores (nome_completo, matricula, cargo_id, unidade_id, tipo_vinculo) values ('X', '999999', $1, $2, 'efetivo')`,
         [cargo, cofit], /row-level security|permission denied/);
       await c.falha(`insert into public.unidades (sigla, nome, tipo, unidade_pai_id) values ('NOVA', 'Nova', 'coordenadoria', $1)`,
         [cofit], /permission denied/);
@@ -255,7 +255,7 @@ describe('matrícula obrigatória e única', () => {
       const cofit = await idUnidade(c, 'COFIT');
       const cargo = (await c.sistema(`select id from public.cargos limit 1`))[0].id;
       await c.como('sec');
-      const ins = `insert into public.servidores (nome_completo, matricula, cargo_id, unidade_id) values ('Novo', $1, $2, $3)`;
+      const ins = `insert into public.servidores (nome_completo, matricula, cargo_id, unidade_id, tipo_vinculo) values ('Novo', $1, $2, $3, 'efetivo')`;
       await c.falha(ins, [null, cargo, cofit], /null value/);
       await c.falha(ins, ['', cargo, cofit], /check constraint/);
       await c.falha(ins, ['   ', cargo, cofit], /check constraint/);
