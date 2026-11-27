@@ -4,7 +4,7 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 
 ## Fase atual
 
-**Fase 5 — Produtividade (Adendo 01)**: implementada em 27/11/2026, aguardando validação; **não aplicada no Supabase de testes**. Fase 7 (parte técnica) concluída antes. Próximo: roteiro geral de testes com o responsável (`docs/roteiro-testes.md`, inclui a seção 7 de produtividade). **Sistema não liberado para dados reais.**
+**Fase 5 — Produtividade (Adendo 01)**: implementada, aplicada no Supabase de testes e publicada em 27/11/2026 (PR #17); aguardando validação. Fase 7 (parte técnica) concluída antes. Próximo: roteiro geral de testes com o responsável (`docs/roteiro-testes.md`, inclui a seção 7 de produtividade). **Sistema não liberado para dados reais.**
 
 | Fase | Situação |
 |---|---|
@@ -12,7 +12,7 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 | 2. Servidores, férias, folhas de ponto | Concluída e publicada (testes do responsável pendentes) |
 | 3. Demandas, calendário, painéis | Concluída, aplicada e publicada (aguardando validação) |
 | 4. Contratos, UCs, faturas, aluguéis | Concluída, aplicada e publicada (aguardando validação) |
-| 5. Produtividade | Concluída conforme o **Adendo 01** (aguardando validação; não aplicada no Supabase) |
+| 5. Produtividade | Concluída conforme o **Adendo 01**, aplicada e publicada (aguardando validação) |
 | 6. Relatórios e exportações | Concluída, aplicada no Supabase de testes e publicada (aguardando validação) |
 | 7. Testes finais e implantação | Parte técnica concluída; aguardando o roteiro de testes do responsável e as decisões de produção |
 
@@ -198,7 +198,7 @@ Mapa dos testes obrigatórios: T1–T2 formulário; T3–T4 institucional 25,65 
 
 ## Pendências da Fase 5
 
-- **Aplicar as migrations `20261201000100` a `20261201000500` no Supabase de testes e republicar** (aguardando autorização).
+- ~~Aplicar a Fase 5 no Supabase de testes e republicar~~ **Feito em 27/11/2026** (PR #17). Verificação no banco real: 0 FALHA; bucket `produtividade` privado; rotina diária executada sem erro.
 - Pendências do Adendo 01 (seção 13): continuam valendo os padrões da tabela acima.
 - Designar, no ambiente de testes, a autoridade revisora e a instância de homologação para testar o ciclo inteiro.
 - Os 13 servidores de teste estão sem vínculo: informar o vínculo antes de abrir uma competência de teste (senão ninguém é elegível).
