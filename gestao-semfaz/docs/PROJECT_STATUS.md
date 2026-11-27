@@ -10,8 +10,8 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 |---|---|
 | 1. Fundação | Concluída e publicada (testes do responsável pendentes) |
 | 2. Servidores, férias, folhas de ponto | Concluída e publicada (testes do responsável pendentes) |
-| 3. Demandas, calendário, painéis | Concluída (aguardando validação; não aplicada no Supabase) |
-| 4. Contratos, UCs, faturas, aluguéis | Concluída (aguardando validação; não aplicada no Supabase) |
+| 3. Demandas, calendário, painéis | Concluída e aplicada no Supabase de testes (aguardando validação) |
+| 4. Contratos, UCs, faturas, aluguéis | Concluída e aplicada no Supabase de testes (aguardando validação) |
 | 5. Produtividade | Não iniciada (pendente material) |
 | 6. Relatórios e exportações | Não iniciada |
 | 7. Testes finais e implantação | Não iniciada |
@@ -124,12 +124,12 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 - **Corrigir dados de locador** (nome, e-mail, telefone) ainda não tem tela; hoje só por pedido de alteração do contrato com justificativa. Criar fluxo de aprovação próprio para o locador.
 - **Reajuste automático** pelo índice na data-base: não implementado (só registro do índice e do mês). O reajuste entra por aditivo ou alteração de valor aprovada.
 - Valor anual mostrado = valor mensal × 12 (o protótipo diz "anual (vigência)"; confirmar se deve ser o total da vigência).
-- **Aplicar as Fases 3 e 4 no Supabase de testes e republicar o site** (aguardando autorização). A migration `20261129000050_fase4_tipos.sql` (valores novos de enum) precisa ser aplicada sozinha, antes das demais.
+- ~~Aplicar as Fases 3 e 4 no Supabase de testes~~ **Feito em 27/11/2026** (PR #13 juntado; 8 migrations aplicadas em ordem). Conferido no banco real: 41 tabelas, todas com RLS; nada liberado para `anon`; buckets privados (anexos, contratos, demandas, folhas-ponto); CPF do locador sem acesso pela API; pg_cron com `rotinas-diarias-demandas` e `avisar-atrasos-folhas`; rotina diária executada sem erro.
+- **Republicar o site (GitHub Pages)** com as telas das Fases 3 e 4 (aguardando autorização).
 
 ## Pendências da Fase 3
 
 - **Notificações por e-mail e no celular (push)** (6.10): as notificações internas funcionam. E-mail depende de SMTP próprio no Supabase; push depende de chaves VAPID e de uma Edge Function. Fica para quando o SMTP estiver configurado.
-- **Aplicar a Fase 3 no Supabase de testes e republicar o site** (aguardando autorização).
 - Arrastar cartões no quadro funciona com mouse e toque; pelo teclado, o status muda na ficha da demanda.
 
 ## Pendências da Fase 2
