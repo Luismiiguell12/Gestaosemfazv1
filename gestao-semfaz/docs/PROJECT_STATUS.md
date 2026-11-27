@@ -4,7 +4,7 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 
 ## Fase atual
 
-**Fase 6 — Relatórios e exportações**: implementada, aplicada no Supabase de testes e publicada; aguardando validação (27/11/2026). A Fase 5 (Produtividade) foi pulada por enquanto porque depende das regras da SEMFAZ. A pedido do responsável, as Fases 1 a 4 serão testadas e corrigidas depois, com um roteiro geral de testes.
+**Fase 5 — Produtividade (Adendo 01)**: implementada em 27/11/2026, aguardando validação; **não aplicada no Supabase de testes**. Fase 7 (parte técnica) concluída antes. Próximo: roteiro geral de testes com o responsável (`docs/roteiro-testes.md`, inclui a seção 7 de produtividade). **Sistema não liberado para dados reais.**
 
 | Fase | Situação |
 |---|---|
@@ -12,9 +12,9 @@ Ler no início de cada sessão. Atualizar ao fim de cada fase.
 | 2. Servidores, férias, folhas de ponto | Concluída e publicada (testes do responsável pendentes) |
 | 3. Demandas, calendário, painéis | Concluída, aplicada e publicada (aguardando validação) |
 | 4. Contratos, UCs, faturas, aluguéis | Concluída, aplicada e publicada (aguardando validação) |
-| 5. Produtividade | Não iniciada. Regras recebidas no **Adendo 01** (`docs/ADENDO-PRODUTIVIDADE.md`); campos de elegibilidade já criados |
+| 5. Produtividade | Concluída conforme o **Adendo 01** (aguardando validação; não aplicada no Supabase) |
 | 6. Relatórios e exportações | Concluída, aplicada no Supabase de testes e publicada (aguardando validação) |
-| 7. Testes finais e implantação | Não iniciada |
+| 7. Testes finais e implantação | Parte técnica concluída; aguardando o roteiro de testes do responsável e as decisões de produção |
 
 ## Ambiente de desenvolvimento (verificado em 26/11/2026, ambiente de nuvem do Claude Code)
 
@@ -88,6 +88,17 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 | D55 | Campos da seção 2 do adendo criados já agora (migration `20261130000200_adendo_servidores_cargos.sql`, só acrescenta colunas): `servidores.tipo_vinculo` (efetivo/comissionado/temporário), `servidores.exerce_comissao` (sim/não), `cargos.carreira_excluida` (sim/não, nenhum marcado) e `elegivel_adicional`, **calculado** pelo banco (efetivo e carreira não excluída), sem coluna digitável | Adendo 01, seção 2 e 12 | Não |
 | D56 | Vínculo obrigatório para cadastro novo e na importação de servidores (coluna "tipo de vínculo"; "cargo em comissão/função de confiança" opcional, sim/não). Servidores **já cadastrados ficam sem vínculo** até alguém informar por pedido de alteração — enquanto isso são **não elegíveis** (opção mais conservadora). Depois de informado, o vínculo não pode voltar a ficar vazio | Adendo 01, seção 2 | **Sim** |
 | D57 | Alterar vínculo e função de confiança do servidor e a marca de carreira excluída do cargo passa pela central de aprovações (dados já cadastrados) | Prompt 6.9 | Não |
+| D58 | Backup próprio diário (03:17 Brasília) pelo GitHub Actions: dados do banco (`public`, `app` e usuários do Auth) + arquivos do Storage, **cifrados com AES-256** antes de sair do runner; artefato por 30 dias. Estrutura não entra no backup (vem das migrations). Complementa o backup/PITR do plano pago do Supabase | Prompt 7 / Fase 7 | **Sim** |
+| D59 | Restauração só em banco **sem servidores cadastrados** (projeto novo), com gatilhos desligados durante a carga (auditoria não duplica). Testada a cada mudança no CI com dados fictícios | Fase 7 | Não |
+| D60 | `scripts/verificar-seguranca.sql` (somente leitura) é o portão de implantação: o CI reprova com qualquer FALHA; produção só sobe sem FALHA | Fase 7 | Não |
+| D61 | Chefia imediata calculada pela estrutura: chefia designada (se houver) → coordenador/chefe da unidade → se o próprio for o chefe, a chefia da unidade superior (diretor; Gabinete = Secretária). Secretária sem chefia: precisa de designação se for elegível | Adendo 3.2.1 | **Sim** |
+| D62 | Abertura da competência (Secretária/Admin) cria uma avaliação por servidor **elegível, ativo e em exercício na SEMFAZ no mês** (datas de entrada/saída novas no cadastro; vazias = mês inteiro). Pode rodar de novo para incluir servidores novos | Adendo 6.1 | **Sim** |
+| D63 | Mudança no mês = "dividir período" (Secretária/Admin) com outra chefia; funcional do mês = **média ponderada pelos dias elegíveis, truncada em 2 casas** (nunca arredonda para cima) | Adendo 3.2.7 | **Sim** |
+| D64 | Prova obrigatória por indicador: demanda, etapa de checklist ou mensagem/feedback **do próprio servidor**, anexo (bucket privado `produtividade`) ou referência externa. Justificativa mín. 10 caracteres. O servidor só vê a avaliação depois de enviada | Adendo 3.2.3 | **Sim** |
+| D65 | Revisora: o recurso vai para a primeira autoridade revisora designada sem conflito; sem designação, a Secretária é avisada para designar. Homologação: só pela instância designada (Secretária/Admin não homologam por serem gestores; precisam estar designados) | Adendo 6.5–6.8 | **Sim** |
+| D66 | Demonstrativo "congelado" (memória de cálculo) quando todos os períodos do servidor são homologados; retificação gera nova versão. Encaminhamento SEMAD só com tudo homologado; cada geração é uma versão | Adendo 6.9 e 9 | Não |
+| D67 | Valor anual de meta/arrecadação por quadrimestre; arrecadação editável até a homologação do resultado; reapurar apaga só o resultado ainda não homologado | Adendo 4.3 | **Sim** |
+| D68 | Permissão `produtividade.institucional.gerir` = módulo extra "prod_institucional" (fora dos pacotes); Secretária/Admin sempre têm | Adendo 4.3.4 | **Sim** |
 | D15 | Repositório público e GitHub Pages nesta fase (só dados fictícios). **Rever antes de qualquer dado real** (repositório privado / Cloudflare Pages / Netlify) | Prompt 7 | Rever antes de dados reais |
 
 ## Pendências (seção 9 do prompt)
@@ -104,9 +115,11 @@ No computador do projeto: instalar a Supabase CLI e rodar `supabase start` + `su
 
 Arquivo: `docs/ADENDO-PRODUTIVIDADE.md`. Transforma o módulo de Produtividade na **avaliação mensal de desempenho** do decreto: avaliação pela chefia imediata (5 indicadores, até 70 pontos, com justificativa e prova obrigatórias), desempenho institucional quadrimestral por arrecadação (até 30 pontos), nota, mínimos, faixas e proporcionalidade, ciência, recurso, revisão, homologação com segregação de funções, encaminhamento à SEMAD (Anexos I e II) e dossiê para o Controle Interno.
 
-**Já feito (sem interromper a fase atual):** campos da seção 2 no cadastro (D55–D57). Testes: `tests/db/adendo.test.ts`.
+**Já feito (sem interromper a fase atual):** campos da seção 2 no cadastro (D55–D57). Testes: `tests/db/adendo.test.ts`. Aplicado no Supabase de testes e publicado em 27/11/2026 (PR #16); os 13 servidores de teste estão sem vínculo informado (não elegíveis) até alguém preencher.
 
-**Fica para a Fase 5 (implementação completa do adendo, seção 12):**
+**Implementado na Fase 5 (27/11/2026):** tudo da lista abaixo, com as decisões D61–D68.
+
+**Escopo da Fase 5 (implementação completa do adendo, seção 12):**
 - Tabela de regras versionada (indicadores, máximos, pesos, mínimos, faixas, transição, prazos) e cada ciclo gravando a versão usada.
 - Chefia imediata calculada pela estrutura + chefia substituta/designada por servidor; designações da autoridade revisora e da instância de homologação.
 - Ciclo mensal (máquina de estados no banco): abertura, avaliação com provas (registros do sistema, anexos, referência externa), painel de subsídios só com fatos (sem nota sugerida), avaliação parcial por período com média ponderada, ciência, recurso em dias úteis, revisão, homologação individual/lote, devolução, retificação.
@@ -169,6 +182,46 @@ Arquivo: `docs/ADENDO-PRODUTIVIDADE.md`. Transforma o módulo de Produtividade n
 | E2E de fumaça | 20/20 (inclui baixar Excel e PDF de verdade e conferir o arquivo) |
 
 **Não executado:** Supabase real (Fase 6 ainda não aplicada); abrir os arquivos no Excel/LibreOffice de verdade (conferido só a estrutura do arquivo).
+
+## Testes da Fase 5 (executados em 27/11/2026, resultado real)
+
+| Suíte | Resultado |
+|---|---|
+| Banco (`tests/db/fase5.test.ts`): os **16 testes obrigatórios** do adendo (T1–T16) + fluxo completo (ciência, recurso, revisão, homologação, demonstrativo, SEMAD, retificação), relatórios, LGPD e rotina | 12 cenários, todos ok |
+| Todos (`npm test`) | 148/148 |
+| E2E | 21/21 (tela da equipe, formulário com subsídios, Anexo I baixado e conferido, painel do funcionário) |
+| Build + CSP | ok, 23 páginas |
+
+Mapa dos testes obrigatórios: T1–T2 formulário; T3–T4 institucional 25,65 e índice ≤ 1; T5–T8 enquadramento, mínimos, transição (56 → 80 → 24%) e proporcionalidade (20/30 → 0,6667); T9 média ponderada; T10 recurso fora do prazo com feriado; T11–T12 segregação (inclusive Administrador); T13 meta travada; T14 homologada imutável; T15 servidor não lê a de outro; T16 não elegíveis fora do ciclo.
+
+**Não executado:** Supabase real; envio real de arquivos ao bucket `produtividade`; rotina diária no pg_cron real.
+
+## Pendências da Fase 5
+
+- **Aplicar as migrations `20261201000100` a `20261201000500` no Supabase de testes e republicar** (aguardando autorização).
+- Pendências do Adendo 01 (seção 13): continuam valendo os padrões da tabela acima.
+- Designar, no ambiente de testes, a autoridade revisora e a instância de homologação para testar o ciclo inteiro.
+- Os 13 servidores de teste estão sem vínculo: informar o vínculo antes de abrir uma competência de teste (senão ninguém é elegível).
+
+## Fase 7 (executado em 27/11/2026, resultado real)
+
+| Item | Resultado |
+|---|---|
+| `scripts/verificar-seguranca.sql` no Supabase de testes | **0 FALHA**; 3 ATENÇÃO esperadas (MFA desligada nos testes, permissões provisórias, servidores sem vínculo) |
+| `scripts/testar-restauracao.sh` (local e no CI) | ok: 43 tabelas idênticas, 331 linhas; numeração das demandas continua; arquivo cifrado sem texto legível |
+| `scripts/backup-storage.mjs` contra Storage simulado | ok: buckets e pastas aninhadas; chave errada recusada |
+| CI com os passos novos (restauração + verificação) | verde |
+| Workflow `backup.yml` real | **não executado**: faltam os secrets `SUPABASE_DB_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `BACKUP_PASSPHRASE` |
+
+Documentos: `docs/implantacao.md` (passo a passo e checklist de produção), `docs/seguranca/fase7-revisao-final.md` (OWASP consolidado, riscos R1–R8, LGPD), `docs/roteiro-testes.md` (roteiro geral para o responsável).
+
+## Pendências da Fase 7
+
+- **Roteiro geral de testes** pelo responsável (`docs/roteiro-testes.md`) e correções do que aparecer.
+- **Secrets do backup** no GitHub (ver `docs/implantacao.md`, seção 4) e uma execução manual com sucesso.
+- Decisões de produção: hospedagem com cabeçalhos HTTP, repositório privado, SMTP institucional, plano do Supabase com backup/PITR (riscos R1–R8 da revisão final).
+- Parecer do DPO sobre `docs/lgpd.md` (bases legais, retenção, aviso de privacidade).
+- Fase 5 (Produtividade / Adendo 01).
 
 ## Pendências da Fase 6
 

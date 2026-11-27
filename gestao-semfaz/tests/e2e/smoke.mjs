@@ -51,7 +51,7 @@ const modulos = [
   M('painel', 'Painel', '/', 'painel', 10, 'ativo'), M('demandas', 'Demandas', '/demandas', 'demandas', 20, 'ativo'), M('calendario', 'Calendário', '/calendario', 'calendario', 30, 'ativo'),
   M('contratos', 'Contratos de locação', '/contratos', 'contratos', 40, 'ativo'), M('unidades_consumidoras', 'Unidades consumidoras', '/unidades-consumidoras', 'energia', 50, 'ativo'),
   M('ferias', 'Férias e folgas', '/ferias', 'ferias', 60, 'ativo'), M('folhas_ponto', 'Folhas de ponto', '/folhas-ponto', 'relogio', 70, 'ativo'),
-  M('produtividade', 'Produtividade', '/produtividade', 'grafico', 80, 'em_definicao'), M('aprovacoes', 'Aprovações', '/aprovacoes', 'aprovacoes', 90, 'ativo'),
+  M('produtividade', 'Produtividade', '/produtividade', 'grafico', 80, 'ativo'), M('aprovacoes', 'Aprovações', '/aprovacoes', 'aprovacoes', 90, 'ativo'),
   M('relatorios', 'Relatórios', '/relatorios', 'relatorios', 100, 'ativo'), M('usuarios', 'Unidades e usuários', '/usuarios', 'usuarios', 110, 'ativo'),
   M('obrigacoes_fiscais', 'Obrigações fiscais', '/obrigacoes-fiscais', 'recibo', 120, 'em_breve'),
 ];
@@ -126,6 +126,26 @@ async function simularApi(page, perfil, aal) {
     if (p.endsWith('/rpc/relatorio_demandas_unidade')) return json([{ unidade: 'COFIT', abertas: 5, atrasadas: 2, criadas_periodo: 7, concluidas_periodo: 9, concluidas_no_prazo: 8, no_prazo_pct: 89 }, { unidade: 'CONTA', abertas: 3, atrasadas: 0, criadas_periodo: 2, concluidas_periodo: 4, concluidas_no_prazo: 4, no_prazo_pct: 100 }]);
     if (p.endsWith('/rpc/relatorio_alugueis')) return json([{ competencia: '2026-10-01', contrato: '014/2024', locador: 'Locador Exemplo 1', imovel: 'Imóvel da COAC', valor: 3740, vencimento: '2026-10-10', pago_em: '2026-10-05', valor_pago: 3740, situacao: 'pago' }]);
     if (p.endsWith('/rpc/registrar_exportacao')) return route.fulfill({ status: 204, body: '' });
+    if (p.endsWith('/rpc/prod_listar')) return json([
+      { id: 'av1', servidor_id: 's2', servidor: 'Servidor A', matricula: '000101', unidade: 'COFIT', avaliador: 'Coordenador da COFIT', avaliador_id: 's1', periodo_inicio: '2026-10-01', periodo_fim: '2026-10-31', status: 'rascunho', total_funcional: 40, prazo_recurso: null, pendencias: 2, retifica_id: null, sou_avaliador: perfil !== 'funcionario' },
+      { id: 'av2', servidor_id: 's3', servidor: 'Servidor E', matricula: '000102', unidade: 'COFIT', avaliador: 'Coordenador da COFIT', avaliador_id: 's1', periodo_inicio: '2026-10-01', periodo_fim: '2026-10-31', status: 'aguardando_homologacao', total_funcional: 61, prazo_recurso: null, pendencias: 0, retifica_id: null, sou_avaliador: false },
+    ]);
+    if (p.endsWith('/rpc/prod_resumo')) return json([{ unidade: 'COFIT', total: 2, rascunho: 1, enviada: 0, ciente: 0, em_recurso: 0, aguardando: 1, homologada: 0 }]);
+    if (p.endsWith('/rpc/prod_avaliacao_detalhe')) return json({
+      avaliacao: { id: 'av1', competencia: '2026-10-01', servidor_id: 's2', servidor: 'Servidor A', matricula: '000101', cargo: 'Auditor Fiscal', exerce_comissao: false, unidade: 'COFIT', avaliador: 'Coordenador da COFIT', avaliador_id: 's1',
+        periodo_inicio: '2026-10-01', periodo_fim: '2026-10-31', status: perfil === 'funcionario' ? 'enviada' : 'rascunho', limitacoes: null, total_funcional: 40, enviada_em: null, ciente_em: null, ciencia_meio: null, ciencia_anexo: null,
+        ciencia_registrada_por_nome: null, prazo_recurso: null, homologada_em: null, homologada_por_nome: null, devolucao_motivo: null, retifica_id: null, retificacao_justificativa: null },
+      regra: { versao: 1, max_funcional: 70, prazos: { recurso: 5 }, indicadores: [['F1', 'Qualidade e eficiência na execução das atividades', 20], ['F2', 'Cumprimento de prazos e metas de trabalho', 15], ['F3', 'Produtividade e entregas realizadas', 15], ['F4', 'Qualidade do atendimento', 10], ['F5', 'Organização, responsabilidade e cooperação', 10]].map(([codigo, nome, maximo]) => ({ codigo, nome, maximo })) },
+      notas: [{ indicador: 'F1', nota: 18, justificativa: 'Entregas de qualidade no mês', equivalente: false, justificativa_equivalente: null }, { indicador: 'F2', nota: 12, justificativa: 'Cumpriu os prazos', equivalente: false, justificativa_equivalente: null }],
+      provas: [{ id: 'pr1', indicador: 'F1', tipo: 'demanda', ref_id: 'd2', path: null, nome: null, descricao: null, titulo: '#102 Relatório de fiscalização ISS', demanda_id: 'd2', criado_em: '2026-11-02T12:00:00Z' }],
+      recursos: [], historico: [{ em: '2026-11-01T12:00:00Z', acao: 'aberta', detalhes: {}, ator: 'Secretária Exemplo' }], pendencias_envio: ['F2: sem prova', 'F3: sem nota'],
+      permissoes: { editar: perfil !== 'funcionario', ciencia: perfil === 'funcionario', ciencia_outro_meio: false, recorrer: false, decidir_recurso: false, homologar: false, retificar: false, gerir: perfil === 'secretaria' },
+    });
+    if (p.endsWith('/rpc/prod_subsidios')) return json({ recebidas: [{ id: 'd2', numero: 102, titulo: 'Relatório de fiscalização ISS' }], concluidas: [{ id: 'd3', numero: 98, titulo: 'Parecer ITBI', no_prazo: true, dias_uteis: 4 }], atrasadas: [], checklist: [{ id: 'c1', demanda_id: 'd2', texto: 'Levantar dados' }], feedbacks: [{ id: 'm1', demanda_id: 'd2', feedback: 'ajustar', comentario: 'Detalhar autuações' }], afastamentos: [] });
+    if (p.endsWith('/rpc/prod_demonstrativo')) return json({ servidor: 'Servidor A', matricula: '000101', cargo: 'Auditor Fiscal', unidade: 'COFIT', competencia: '2026-10-01', provisorio: true, regra_versao: 1, transicao: true, pontos_funcionais: 40, pontos_institucionais: null, nota_total: 57.1429, nota_enquadramento: 57, minimo_funcional_atingido: false, minimo_total_atingido: false, motivo_zero: 'pontuação funcional abaixo de 42 e nota abaixo de 60', percentual: 0, dias_elegiveis: 31, dias_mes: 31, fator: 1, percentual_efetivo: 0, periodos: [{ avaliacao_id: 'av1', inicio: '2026-10-01', fim: '2026-10-31', status: 'rascunho', pontos: 40, dias_elegiveis: 31, avaliador: 'Coordenador da COFIT' }], institucional: null });
+    if (p.endsWith('/rpc/prod_minhas')) return json([{ competencia: '2026-10-01', avaliacao_id: 'av1', status: 'enviada', total_funcional: 58, prazo_recurso: null, nota_enquadramento: null, percentual: null, homologada: false },
+      { competencia: '2026-09-01', avaliacao_id: 'av0', status: 'homologada', total_funcional: 63, prazo_recurso: null, nota_enquadramento: 90, percentual: 30, homologada: true }]);
+    if (p.endsWith('/rpc/relatorio_demandas_servidor')) return json([{ servidor: 'Servidor A', matricula: '000101', unidade: 'COFIT', recebidas_periodo: 6, abertas: 3, atrasadas: 1, concluidas_periodo: 5, concluidas_no_prazo: 4 }]);
     if (p.endsWith('/rpc/busca_geral')) return json([{ tipo: 'unidade', id: 'cofit', titulo: 'COFIT', subtitulo: 'Coordenadoria de Fiscalização e Tributos', rota: '/usuarios?unidade=cofit' }]);
     const t = p.split('/').pop();
     const ano = new Date().getFullYear();
@@ -203,7 +223,7 @@ await passo('painel da secretária (desktop) segue o protótipo', async () => {
   await page.goto(`${BASE}/`);
   await page.getByRole('heading', { name: 'Como estão as unidades' }).waitFor();
   for (const t of ['Aguardando sua aprovação', 'Contratos perto do vencimento', 'Próximos compromissos', 'Ausências neste mês', 'Ligadas ao Gabinete', 'DAT · Administração Tributária']) await page.getByText(t, { exact: true }).first().waitFor();
-  assert.equal(await page.locator('nav[aria-label="Menu principal"] [aria-disabled="true"]').count(), 2);
+  assert.equal(await page.locator('nav[aria-label="Menu principal"] [aria-disabled="true"]').count(), 1);
   await page.getByText('1 em menos de 30 dias').waitFor();
   await page.getByText('Contrato 014/2024').first().waitFor();
   await page.getByText('Com atraso', { exact: true }).first().waitFor();
@@ -248,7 +268,8 @@ await passo('feriados e relatórios (prévia e exportação Excel/PDF)', async (
   await page.screenshot({ path: `${SHOTS}/feriados.png`, fullPage: true });
   await page.goto(`${BASE}/relatorios/`);
   await page.getByRole('heading', { name: 'Demandas por unidade' }).waitFor();
-  assert.equal(await page.getByRole('button', { name: /Produtividade/ }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: /^Produtividade/ }).isDisabled(), false);
+  await page.getByRole('button', { name: /Dossiê do ciclo/ }).waitFor();
   await page.getByRole('button', { name: 'Ver na tela' }).click();
   await page.getByRole('cell', { name: '89%' }).waitFor();
   await page.screenshot({ path: `${SHOTS}/relatorios.png`, fullPage: true });
@@ -371,12 +392,38 @@ await passo('unidades consumidoras: KPIs, abas por fornecedor e situação', asy
   await page.getByText('Colunas provisórias', { exact: false }).waitFor();
 });
 
+await passo('produtividade: avaliações do mês, abas por papel e formulário com subsídios', async () => {
+  const page = await novaPagina({ perfil: 'secretaria' });
+  await page.goto(`${BASE}/produtividade/`);
+  await page.getByRole('heading', { name: 'Produtividade da equipe' }).waitFor();
+  await page.getByText('Decreto do Adicional de Desempenho e Produtividade', { exact: false }).first().waitFor();
+  for (const t of ['Avaliações do mês', 'Indicadores de demandas', 'Institucional', 'Recursos', 'Homologação', 'Encaminhamento SEMAD', 'Configuração']) await page.getByRole('tab', { name: t }).waitFor();
+  await page.getByText('2 indicador(es) pendente(s)').waitFor();
+  await page.screenshot({ path: `${SHOTS}/produtividade.png`, fullPage: true });
+  await page.getByRole('tab', { name: 'Indicadores de demandas' }).click();
+  await page.getByRole('heading', { name: 'Por servidor' }).waitFor();
+  await page.getByRole('tab', { name: 'Institucional' }).click();
+  await page.getByText('Não somar dívida ativa', { exact: false }).waitFor();
+  await page.goto(`${BASE}/produtividade/avaliacao/?id=av1`);
+  await page.getByRole('heading', { name: /Avaliação de Servidor A/ }).waitFor();
+  await page.getByText('Subsídios do período').waitFor();
+  await page.getByText(/Concluídas \(1; no prazo 1/).waitFor();
+  await page.getByRole('button', { name: 'Enviar ao servidor' }).waitFor();
+  await page.getByText('regra de transição – § 12 do art. 15-B').waitFor();
+  await page.getByText('Falta para enviar: F2: sem prova; F3: sem nota.').waitFor();
+  await page.screenshot({ path: `${SHOTS}/produtividade-avaliacao.png`, fullPage: true });
+  const [anexo] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Anexo I (PDF)' }).click()]);
+  assert.equal(readFileSync(await anexo.path()).subarray(0, 5).toString(), '%PDF-');
+});
+
 await passo('painel do funcionário: menu reduzido', async () => {
   const page = await novaPagina({ perfil: 'funcionario', aal: 'aal1' });
   await page.goto(`${BASE}/`);
   await page.getByText('Minhas férias e folgas').waitFor();
   await page.getByText('86%').waitFor();
   await page.getByRole('button', { name: '+ Sugerir demanda' }).waitFor();
+  await page.getByRole('link', { name: 'Dar ciência' }).waitFor();
+  await page.getByText('setembro de 2026').waitFor();
   assert.equal(await page.locator('nav[aria-label="Menu principal"] .menu-item').count(), 5);
   await page.screenshot({ path: `${SHOTS}/painel-funcionario.png`, fullPage: true });
 });

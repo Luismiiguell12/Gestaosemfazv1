@@ -39,6 +39,14 @@ jobs:
       - run: npm run typecheck
       - name: Testes unitários e de banco (RLS, aprovações, auditoria)
         run: npm test
+      - name: Teste de backup e restauração (dados fictícios)
+        run: |
+          set -o pipefail
+          bash scripts/testar-restauracao.sh 2>&1 | grep -v '^pg_dump: \(warning\|detail\|hint\)'
+      - name: Verificação de segurança do banco
+        run: |
+          psql -d gestao_semfaz_test -v ON_ERROR_STOP=1 -At -F ' | ' -f scripts/verificar-seguranca.sql | tee /tmp/verif.txt
+          ! grep -q ' | FALHA | ' /tmp/verif.txt
       - name: Build estático + CSP
         run: npm run build
         env:

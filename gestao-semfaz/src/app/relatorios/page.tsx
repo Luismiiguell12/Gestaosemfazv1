@@ -48,10 +48,11 @@ function Relatorios() {
   const R = (recentes.dados as Exportacao[] | null) ?? [];
 
   const set = (k: keyof Valores) => (e: { target: { value: string } }) => setV({ ...v, [k]: e.target.value });
-  const meses = sel?.filtros.includes('meses');
+  const meses = sel?.filtros.includes('meses') || sel?.filtros.includes('competencia');
   const descricaoFiltros = (r: Relatorio, x: Valores) => {
     const f: string[] = [];
     if (r.filtros.includes('periodo')) f.push(`Período: ${textoCelula(x.de, 'data')} a ${textoCelula(x.ate, 'data')}`);
+    if (r.filtros.includes('competencia')) f.push(`Competência: ${x.de.slice(5, 7)}/${x.de.slice(0, 4)}`);
     if (r.filtros.includes('meses')) f.push(`Competências: ${x.de.slice(5, 7)}/${x.de.slice(0, 4)} a ${x.ate.slice(5, 7)}/${x.ate.slice(0, 4)}`);
     if (r.filtros.includes('ano')) f.push(`Ano: ${x.ano}`);
     if (r.filtros.includes('dias')) f.push(`Próximos ${x.dias} dias`);
@@ -92,9 +93,10 @@ function Relatorios() {
 
   const escolher = (r: Relatorio) => {
     setSelId(r.id); setDados(null); setErro(null);
-    const mudaPeriodo = r.filtros.includes('meses') !== (sel?.filtros.includes('meses') ?? false);
-    setV((x) => ({ ...x, situacao: '', ...(mudaPeriodo && r.filtros.includes('meses') ? { de: x.de.slice(0, 7), ate: x.ate.slice(0, 7) } : {}),
-      ...(mudaPeriodo && !r.filtros.includes('meses') ? { de: `${x.de.slice(0, 7)}-01`, ate: iso(hoje) } : {}) }));
+    const ehMes = (y: Relatorio) => y.filtros.includes('meses') || y.filtros.includes('competencia');
+    const mudaPeriodo = ehMes(r) !== (sel ? ehMes(sel) : false);
+    setV((x) => ({ ...x, situacao: '', ...(mudaPeriodo && ehMes(r) ? { de: x.de.slice(0, 7), ate: x.ate.slice(0, 7) } : {}),
+      ...(mudaPeriodo && !ehMes(r) ? { de: `${x.de.slice(0, 7)}-01`, ate: iso(hoje) } : {}) }));
   };
 
   const valoresMes = useMemo(() => (meses ? { ...v, de: v.de.slice(0, 7), ate: v.ate.slice(0, 7) } : v), [meses, v]);
@@ -131,6 +133,7 @@ function Relatorios() {
                   <Campo rotulo="De"><input type="date" value={v.de} max={v.ate} onChange={set('de')} /></Campo>
                   <Campo rotulo="Até"><input type="date" value={v.ate} min={v.de} onChange={set('ate')} /></Campo>
                 </div>}
+                {sel.filtros.includes('competencia') && <Campo rotulo="Competência"><input type="month" value={v.de.slice(0, 7)} onChange={(e) => setV({ ...v, de: e.target.value, ate: e.target.value })} /></Campo>}
                 {meses && <div className="form-linha">
                   <Campo rotulo="Competência de"><input type="month" value={v.de.slice(0, 7)} onChange={(e) => setV({ ...v, de: e.target.value })} /></Campo>
                   <Campo rotulo="até"><input type="month" value={v.ate.slice(0, 7)} onChange={(e) => setV({ ...v, ate: e.target.value })} /></Campo>

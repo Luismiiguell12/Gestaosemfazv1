@@ -1,0 +1,87 @@
+name: Backup diário
+
+# Banco (dados) + arquivos do Storage, criptografados com AES-256 (gpg) antes de sair do runner.
+# O repositório é público: o artefato só contém o arquivo CIFRADO. Sem os secrets, o job só avisa e termina.
+# Secrets necessários (Settings > Secrets and variables > Actions):
+#   SUPABASE_DB_URL            conexão do "Session pooler" (IPv4), com a senha do banco
+#   SUPABASE_SERVICE_ROLE_KEY  chave service_role (só para baixar os arquivos do Storage)
+#   BACKUP_PASSPHRASE          senha longa do backup (guardar também fora do GitHub)
+# Variável: NEXT_PUBLIC_SUPABASE_URL (já usada pelo Pages)
+on:
+  schedule:
+    - cron: '17 6 * * *'   # 03:17 de Brasília
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: gestao-semfaz
+    env:
+      DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+    steps:
+      - name: Conferir configuração
+        id: cfg
+        working-directory: .
+        run: |
+          if [ -z "$DB_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::notice::Backup não configurado (faltam os secrets SUPABASE_DB_URL e/ou BACKUP_PASSPHRASE). Veja docs/implantacao.md."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          elif [ ${#BACKUP_PASSPHRASE} -lt 20 ]; then
+            echo "::error::BACKUP_PASSPHRASE precisa ter pelo menos 20 caracteres."; exit 1
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v7
+        if: steps.cfg.outputs.ok == 'true'
+      - uses: actions/setup-node@v7
+        if: steps.cfg.outputs.ok == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gestao-semfaz/package-lock.json
+      - name: Instalar cliente PostgreSQL 17 (mesma versão do Supabase)
+        if: steps.cfg.outputs.ok == 'true'
+        working-directory: .
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSo /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - name: Backup do banco
+        if: steps.cfg.outputs.ok == 'true'
+        run: bash scripts/backup-banco.sh "$RUNNER_TEMP/bkp"
+      - name: Backup dos arquivos (Storage)
+        if: steps.cfg.outputs.ok == 'true' && env.SUPABASE_SERVICE_ROLE_KEY != '' && env.SUPABASE_URL != ''
+        run: |
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+          node scripts/backup-storage.mjs "$RUNNER_TEMP/bkp/storage.zip"
+      - name: Criptografar
+        if: steps.cfg.outputs.ok == 'true'
+        run: |
+          nome="backup-$(date -u +%Y%m%d-%H%M).tar.gpg"
+          tar -C "$RUNNER_TEMP/bkp" -cf - . | gpg --batch --quiet --pinentry-mode loopback --passphrase-fd 3 \
+            --symmetric --cipher-algo AES256 -o "$RUNNER_TEMP/$nome" 3<<<"$BACKUP_PASSPHRASE"
+          rm -rf "$RUNNER_TEMP/bkp"
+          echo "ARQUIVO=$nome" >> "$GITHUB_ENV"
+          echo "backup: $(du -h "$RUNNER_TEMP/$nome" | cut -f1)"
+      - uses: actions/upload-artifact@v7
+        if: steps.cfg.outputs.ok == 'true'
+        with:
+          name: ${{ env.ARQUIVO }}
+          path: ${{ runner.temp }}/${{ env.ARQUIVO }}
+          retention-days: 30
+          if-no-files-found: error

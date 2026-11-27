@@ -1,6 +1,6 @@
 import type { Coluna } from './exportar';
 
-export type Filtro = 'periodo' | 'meses' | 'unidade' | 'situacaoContrato' | 'situacaoAluguel' | 'dias' | 'ano' | 'fornecedor' | 'soVencidas' | 'tabela';
+export type Filtro = 'competencia' | 'periodo' | 'meses' | 'unidade' | 'situacaoContrato' | 'situacaoAluguel' | 'dias' | 'ano' | 'fornecedor' | 'soVencidas' | 'tabela';
 export interface Valores { de: string; ate: string; unidade: string; situacao: string; dias: string; ano: string; fornecedor: string; tabela: string }
 
 export interface Relatorio {
@@ -18,6 +18,8 @@ export const SITUACAO_FATURA: Record<string, string> = { paga: 'Paga', pendente:
 export const SITUACAO_FOLHA: Record<string, string> = { devolvida: 'Devolvida', enviada: 'Entregue à unidade', nao_enviada: 'Não entregue' };
 export const TIPO_AFAST: Record<string, string> = { ferias: 'Férias', licenca_premio: 'Licença-prêmio', folga: 'Folga' };
 export const STATUS_AFAST: Record<string, string> = { solicitado: 'Pedido', aprovado: 'Aprovado' };
+export const ROTULO_SIT_AV: Record<string, string> = { rascunho: 'Rascunho', enviada: 'Enviada', ciente: 'Ciente', em_recurso: 'Em recurso',
+  aguardando_homologacao: 'Aguardando homologação', homologada: 'Homologada', retificada: 'Retificada' };
 export const FORNECEDOR: Record<string, string> = { energisa: 'Energisa', igua: 'Iguá', cercos: 'Cercos' };
 
 export const RELATORIOS: Relatorio[] = [
@@ -31,8 +33,19 @@ export const RELATORIOS: Relatorio[] = [
     colunas: [{ chave: 'servidor', rotulo: 'Servidor' }, { chave: 'matricula', rotulo: 'Matrícula', largura: 1.4 }, { chave: 'unidade', rotulo: 'Unidade', largura: 1.4 },
       { chave: 'recebidas_periodo', rotulo: 'Recebidas no período', tipo: 'numero' }, { chave: 'abertas', rotulo: 'Abertas', tipo: 'numero' }, { chave: 'atrasadas', rotulo: 'Atrasadas', tipo: 'numero' },
       { chave: 'concluidas_periodo', rotulo: 'Concluídas no período', tipo: 'numero' }, { chave: 'concluidas_no_prazo', rotulo: 'No prazo', tipo: 'numero' }] },
-  { id: 'produtividade', grupo: 'Demandas e produtividade', titulo: 'Produtividade', descricao: 'Indicadores por período', modulo: 'produtividade', rpc: null, filtros: [], colunas: [], params: () => ({}),
-    pendente: 'Em definição: aguardando as regras de produtividade (material dos fiscais).' },
+  { id: 'produtividade', grupo: 'Demandas e produtividade', titulo: 'Produtividade', descricao: 'Nota, faixa e percentual por servidor', modulo: 'produtividade', rpc: 'relatorio_produtividade',
+    filtros: ['competencia'], params: (v) => ({ p_comp: mes(v.de) }),
+    colunas: [{ chave: 'servidor', rotulo: 'Servidor' }, { chave: 'matricula', rotulo: 'Matrícula', largura: 1.2 }, { chave: 'unidade', rotulo: 'Unidade', largura: 1 },
+      { chave: 'situacao_rotulo', rotulo: 'Situação', largura: 1.6 }, { chave: 'pontos_funcionais', rotulo: 'Funcional', tipo: 'numero' }, { chave: 'pontos_institucionais', rotulo: 'Institucional', tipo: 'numero' },
+      { chave: 'regra', rotulo: 'Regra', largura: 1 }, { chave: 'nota_enquadramento', rotulo: 'Nota', tipo: 'numero', largura: 0.8 }, { chave: 'percentual', rotulo: '%', tipo: 'numero', largura: 0.8 },
+      { chave: 'fator', rotulo: 'Fator', tipo: 'numero', largura: 0.9 }, { chave: 'percentual_efetivo', rotulo: '% efetivo', tipo: 'numero', largura: 1 }, { chave: 'homologado', rotulo: 'Homologado', largura: 1 }] },
+  { id: 'dossie', grupo: 'Demandas e produtividade', titulo: 'Dossiê do ciclo', descricao: 'Para o Controle Interno', modulo: 'produtividade', somenteGestor: true, rpc: 'relatorio_dossie',
+    filtros: ['competencia'], params: (v) => ({ p_comp: mes(v.de) }),
+    colunas: [{ chave: 'servidor', rotulo: 'Servidor' }, { chave: 'matricula', rotulo: 'Matrícula', largura: 1.1 }, { chave: 'unidade', rotulo: 'Unidade', largura: 0.9 }, { chave: 'periodo', rotulo: 'Período', largura: 1.4 },
+      { chave: 'chefia', rotulo: 'Chefia', largura: 2 }, { chave: 'situacao_rotulo', rotulo: 'Situação', largura: 1.4 }, { chave: 'pontos', rotulo: 'Pontos', tipo: 'numero', largura: 0.8 },
+      { chave: 'provas', rotulo: 'Provas', tipo: 'numero', largura: 0.7 }, { chave: 'ciencia', rotulo: 'Ciência', largura: 1.8 }, { chave: 'recurso', rotulo: 'Recurso', largura: 2 },
+      { chave: 'homologacao', rotulo: 'Homologação', largura: 2 }, { chave: 'retificacao', rotulo: 'Retificação', largura: 1.8 }, { chave: 'demonstrativo_versao', rotulo: 'Demonstr. versão', tipo: 'numero', largura: 0.9 },
+      { chave: 'encaminhamentos', rotulo: 'Encaminhamentos SEMAD', largura: 1.8 }, { chave: 'correcoes', rotulo: 'Correções', tipo: 'numero', largura: 0.8 }] },
 
   { id: 'contratos', grupo: 'Contratos de locação', titulo: 'Contratos', descricao: 'Vigência, valores e aditivos', modulo: 'contratos', rpc: 'relatorio_contratos',
     filtros: ['situacaoContrato'], params: (v) => ({ p_situacao: v.situacao || 'vigentes' }),
@@ -97,6 +110,7 @@ export function prepararLinhas(id: string, linhas: Record<string, unknown>[]): R
     if (id === 'alugueis') r.situacao_rotulo = SITUACAO_ALUGUEL[String(l.situacao)] ?? l.situacao;
     if (id === 'faturas' || id === 'faturas_vencidas') { r.situacao_rotulo = SITUACAO_FATURA[String(l.situacao)] ?? l.situacao; r.fornecedor_rotulo = FORNECEDOR[String(l.fornecedor)] ?? l.fornecedor; }
     if (id === 'folhas') r.situacao_rotulo = SITUACAO_FOLHA[String(l.situacao)] ?? l.situacao;
+    if (id === 'produtividade' || id === 'dossie') r.situacao_rotulo = String(l.situacao ?? '').split(', ').map((x) => ROTULO_SIT_AV[x] ?? x).join(', ');
     if (id === 'escala_ferias') { r.tipo_rotulo = TIPO_AFAST[String(l.tipo)] ?? l.tipo; r.situacao_rotulo = STATUS_AFAST[String(l.situacao)] ?? l.situacao; }
     return r;
   });

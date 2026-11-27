@@ -60,10 +60,11 @@ describe('arquivos gerados', () => {
 });
 
 describe('catálogo de relatórios', () => {
-  it('protótipo: 4 grupos com 3 relatórios cada (+ folhas de ponto); produtividade pendente', () => {
+  it('protótipo: 4 grupos (+ folhas de ponto e dossiê); produtividade ativa (Fase 5)', () => {
     const grupos = [...new Set(RELATORIOS.map((r) => r.grupo))];
     expect(grupos).toEqual(['Demandas e produtividade', 'Contratos de locação', 'Água e energia', 'Pessoas e controle']);
-    expect(RELATORIOS.find((r) => r.id === 'produtividade')?.pendente).toBeTruthy();
+    expect(RELATORIOS.find((r) => r.id === 'produtividade')?.pendente).toBeFalsy();
+    expect(RELATORIOS.find((r) => r.id === 'dossie')?.somenteGestor).toBe(true);
     for (const r of RELATORIOS.filter((x) => !x.pendente)) expect(r.rpc && r.colunas.length).toBeTruthy();
   });
   it('acesso no navegador segue módulos e perfil', () => {
